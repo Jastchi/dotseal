@@ -1,4 +1,4 @@
-"""Cryptographic primitives for secure-dotenv.
+"""Cryptographic primitives for dotseal.
 
 Encryption scheme
 -----------------
@@ -42,7 +42,7 @@ ENC_SUFFIX = "]"
 
 # Domain separation string so the public fingerprint can never be confused with
 # any other hash of the key material.
-_FINGERPRINT_DOMAIN = b"secure-dotenv/key-fingerprint/v1"
+_FINGERPRINT_DOMAIN = b"dotseal/key-fingerprint/v1"
 
 
 # --- Helpers ----------------------------------------------------------------
@@ -82,7 +82,7 @@ def load_key_bytes(master_key: str) -> bytes:
     except (binascii.Error, ValueError) as exc:
         raise InvalidMasterKeyError(
             "Master key is not valid base64. It must be a base64-encoded "
-            "32-byte key as produced by `secure-dotenv init`."
+            "32-byte key as produced by `dotseal init`."
         ) from exc
     if len(raw) != KEY_SIZE:
         raise InvalidMasterKeyError(

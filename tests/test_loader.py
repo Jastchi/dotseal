@@ -2,8 +2,8 @@ import os
 
 import pytest
 
-from secure_dotenv import core, crypto, loader
-from secure_dotenv.exceptions import KeyFingerprintMismatchError
+from dotseal import core, crypto, loader
+from dotseal.exceptions import KeyFingerprintMismatchError
 
 
 @pytest.fixture

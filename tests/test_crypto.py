@@ -2,8 +2,8 @@ import base64
 
 import pytest
 
-from secure_dotenv import crypto
-from secure_dotenv.exceptions import DecryptionError, InvalidMasterKeyError
+from dotseal import crypto
+from dotseal.exceptions import DecryptionError, InvalidMasterKeyError
 
 
 def test_generate_master_key_is_32_bytes_base64():

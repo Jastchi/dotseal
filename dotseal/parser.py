@@ -1,6 +1,6 @@
 """Structure-preserving parser for ``.env`` / ``.env.enc`` files.
 
-The whole point of secure-dotenv is *structural* encryption: keys stay in
+The whole point of dotseal is *structural* encryption: keys stay in
 cleartext, comments and blank lines are preserved, and only values change. To
 make that possible the parser does not collapse a file into a ``dict`` -- it
 keeps an ordered list of :class:`Record` objects so the document can be

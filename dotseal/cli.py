@@ -1,4 +1,4 @@
-"""Command-line interface for secure-dotenv (built on argparse, no extra deps).
+"""Command-line interface for dotseal (built on argparse, no extra deps).
 
 Commands:
     init                     create a master key + gitignore it
@@ -18,22 +18,22 @@ import tempfile
 from typing import List, Optional
 
 from . import __version__, core, crypto
-from .exceptions import SecureDotenvError
+from .exceptions import DotsealError
 
-_GITIGNORE_NOTE = "# Added by `secure-dotenv init` -- never commit your master key"
+_GITIGNORE_NOTE = "# Added by `dotseal init` -- never commit your master key"
 
 
 # --- small IO helpers -------------------------------------------------------
 
 def _read(path: str) -> str:
     if not os.path.isfile(path):
-        raise SecureDotenvError(f"Input file not found: {path}")
+        raise DotsealError(f"Input file not found: {path}")
     with open(path, "r", encoding="utf-8") as fh:
         return fh.read()
 
 
 def _err(msg: str) -> None:
-    print(f"secure-dotenv: error: {msg}", file=sys.stderr)
+    print(f"dotseal: error: {msg}", file=sys.stderr)
 
 
 def _resolve_key_bytes(args: argparse.Namespace, *, search_dir: str) -> bytes:
@@ -151,7 +151,7 @@ def cmd_edit(args: argparse.Namespace) -> int:
         crypto._zero(key_bytes)
         cleartext = "# New encrypted env file. Add KEY=value lines.\n"
 
-    fd, tmp_path = tempfile.mkstemp(suffix=".env", prefix=".secure-dotenv-edit-")
+    fd, tmp_path = tempfile.mkstemp(suffix=".env", prefix=".dotseal-edit-")
     try:
         os.fchmod(fd, 0o600)
         with os.fdopen(fd, "w", encoding="utf-8") as fh:
@@ -188,10 +188,10 @@ def cmd_edit(args: argparse.Namespace) -> int:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="secure-dotenv",
-        description="Offline-first, Git-friendly encrypted .env manager (SOPS-style structural encryption).",
+        prog="dotseal",
+        description="Git-friendly encrypted .env manager with cleartext keys and sealed values.",
     )
-    parser.add_argument("--version", action="version", version=f"secure-dotenv {__version__}")
+    parser.add_argument("--version", action="version", version=f"dotseal {__version__}")
 
     def add_key_args(p: argparse.ArgumentParser) -> None:
         p.add_argument("-k", "--key", help="Master key (base64). Overrides env var and key file.")
@@ -228,7 +228,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     args = parser.parse_args(argv)
     try:
         return args.func(args)
-    except SecureDotenvError as exc:
+    except DotsealError as exc:
         _err(str(exc))
         return 1
     except KeyboardInterrupt:  # pragma: no cover

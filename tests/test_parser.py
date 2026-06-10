@@ -1,7 +1,7 @@
 import pytest
 
-from secure_dotenv import parser
-from secure_dotenv.exceptions import ParseError
+from dotseal import parser
+from dotseal.exceptions import ParseError
 
 
 def test_parses_entries_comments_blanks():

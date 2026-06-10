@@ -4,8 +4,8 @@ import sys
 
 import pytest
 
-from secure_dotenv import core, crypto
-from secure_dotenv.cli import main
+from dotseal import core, crypto
+from dotseal.cli import main
 
 SAMPLE_ENV = (
     "# project config\n"
@@ -58,7 +58,7 @@ def test_encrypt_keeps_keys_cleartext(project):
     assert "DATABASE_URL=ENC[AES_GCM,data:" in enc
     assert "DEBUG=ENC[AES_GCM,data:" in enc
     assert "# project config" in enc  # comments preserved
-    assert "# secure-dotenv:" in enc  # metadata footer
+    assert "# dotseal:" in enc  # metadata footer
     assert "postgres://user" not in enc  # value is gone
 
 
@@ -68,9 +68,8 @@ def test_encrypt_decrypt_roundtrip_via_cli(project):
     assert main(["encrypt"]) == 0
     (project / ".env").unlink()
     assert main(["decrypt"]) == 0
-    values = core.decrypt_to_dict  # sanity import
     parsed = (project / ".env").read_text()
-    from secure_dotenv import parser
+    from dotseal import parser
 
     entries = {e.key: e.value for e in parser.parse(parsed).entries()}
     assert entries["DATABASE_URL"] == "postgres://user:pass@localhost:5432/db"
@@ -124,11 +123,11 @@ def test_edit_reencrypts_changes(project, monkeypatch):
     assert main(["edit"]) == 0
 
     # no temp .env files left behind
-    leftovers = [p for p in os.listdir(project) if "secure-dotenv-edit-" in p]
+    leftovers = [p for p in os.listdir(project) if "dotseal-edit-" in p]
     assert leftovers == []
 
     assert main(["decrypt", ".env.enc", "out.env"]) == 0
-    from secure_dotenv import parser
+    from dotseal import parser
 
     entries = {e.key: e.value for e in parser.parse((project / "out.env").read_text()).entries()}
     assert entries["DEBUG"] == "False"

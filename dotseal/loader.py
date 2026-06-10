@@ -12,7 +12,7 @@ import os
 from typing import Optional
 
 from . import core, crypto
-from .exceptions import MasterKeyNotFoundError, SecureDotenvError
+from .exceptions import MasterKeyNotFoundError, DotsealError
 
 
 def load_env(
@@ -30,7 +30,7 @@ def load_env(
     Args:
         dotenv_path: path to the encrypted env file (default ``".env.enc"``).
         master_key: base64 master key. If ``None``, it is resolved from the
-            ``SECURE_DOTENV_MASTER_KEY`` env var or a local key file.
+            ``DOTSEAL_MASTER_KEY`` env var or a local key file.
         override: if ``False`` (default), variables already present in
             ``os.environ`` are left untouched (the process environment wins,
             which matches typical 12-factor behavior). If ``True``, decrypted
@@ -40,7 +40,7 @@ def load_env(
     Returns:
         ``True`` if at least one variable was set in ``os.environ``, else
         ``False`` (matching ``load_dotenv``). To get the decrypted values back
-        as a mapping instead, use :func:`secure_dotenv.decrypt_to_dict`.
+        as a mapping instead, use :func:`dotseal.decrypt_to_dict`.
 
     Raises:
         FileNotFoundError: if ``dotenv_path`` does not exist.
@@ -75,5 +75,5 @@ def load_env(
 __all__ = [
     "load_env",
     "MasterKeyNotFoundError",
-    "SecureDotenvError",
+    "DotsealError",
 ]

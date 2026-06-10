@@ -1,4 +1,4 @@
-"""secure-dotenv: offline-first, Git-friendly encrypted env var manager.
+"""dotseal: Git-friendly encrypted env var manager with cleartext keys and sealed values.
 
 Public API
 ----------
@@ -7,7 +7,7 @@ Public API
 * :func:`encrypt_text` / :func:`decrypt_text` -- whole-file transforms.
 * :func:`decrypt_to_dict` -- decrypt into a mapping, in memory.
 * :func:`generate_master_key` / :func:`resolve_master_key` -- key helpers.
-* The exception hierarchy rooted at :class:`SecureDotenvError`.
+* The exception hierarchy rooted at :class:`DotsealError`.
 """
 
 from __future__ import annotations
@@ -28,7 +28,7 @@ from .exceptions import (
     KeyFingerprintMismatchError,
     MasterKeyNotFoundError,
     ParseError,
-    SecureDotenvError,
+    DotsealError,
 )
 from .loader import load_env
 
@@ -46,7 +46,7 @@ __all__ = [
     "key_fingerprint",
     "ENV_VAR_NAME",
     "KEY_FILE_NAME",
-    "SecureDotenvError",
+    "DotsealError",
     "MasterKeyNotFoundError",
     "InvalidMasterKeyError",
     "KeyFingerprintMismatchError",
