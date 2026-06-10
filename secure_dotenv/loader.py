@@ -1,54 +1,61 @@
 """Runtime loader: decrypt an ``.env.enc`` into ``os.environ`` with no disk write.
 
-This is the import-time companion to the CLI. Applications call
-:func:`load_secure_dotenv` early in startup to make their secrets available via
-``os.environ`` / ``os.getenv`` without ever materializing a cleartext file.
+This is the import-time companion to the CLI and a drop-in replacement for
+``python-dotenv``'s ``load_dotenv``: call :func:`load_env` early in startup to
+make your (encrypted) secrets available via ``os.environ`` / ``os.getenv``
+without ever materializing a cleartext file.
 """
 
 from __future__ import annotations
 
 import os
-from typing import Dict, Optional
+from typing import Optional
 
 from . import core, crypto
 from .exceptions import MasterKeyNotFoundError, SecureDotenvError
 
 
-def load_secure_dotenv(
-    enc_file_path: str = ".env.enc",
-    master_key: Optional[str] = None,
+def load_env(
+    dotenv_path: str = ".env.enc",
     *,
+    master_key: Optional[str] = None,
     override: bool = False,
-) -> Dict[str, str]:
-    """Decrypt ``enc_file_path`` in memory and inject the values into ``os.environ``.
+    encoding: str = "utf-8",
+) -> bool:
+    """Decrypt ``dotenv_path`` in memory and inject the values into ``os.environ``.
+
+    Mirrors ``python-dotenv``'s ``load_dotenv`` so it can be used as a drop-in
+    replacement, but reads a structurally-encrypted ``.env.enc`` file.
 
     Args:
-        enc_file_path: path to the encrypted env file.
+        dotenv_path: path to the encrypted env file (default ``".env.enc"``).
         master_key: base64 master key. If ``None``, it is resolved from the
             ``SECURE_DOTENV_MASTER_KEY`` env var or a local key file.
         override: if ``False`` (default), variables already present in
             ``os.environ`` are left untouched (the process environment wins,
             which matches typical 12-factor behavior). If ``True``, decrypted
             values overwrite existing ones.
+        encoding: text encoding used to read the file.
 
     Returns:
-        A mapping of the variables that were loaded from the file (the full
-        decrypted set, regardless of whether each one was injected).
+        ``True`` if at least one variable was set in ``os.environ``, else
+        ``False`` (matching ``load_dotenv``). To get the decrypted values back
+        as a mapping instead, use :func:`secure_dotenv.decrypt_to_dict`.
 
     Raises:
-        FileNotFoundError: if ``enc_file_path`` does not exist.
+        FileNotFoundError: if ``dotenv_path`` does not exist.
         MasterKeyNotFoundError / DecryptionError / KeyFingerprintMismatchError:
             on key resolution or decryption problems.
     """
-    if not os.path.isfile(enc_file_path):
-        raise FileNotFoundError(f"Encrypted env file not found: {enc_file_path}")
+    if not os.path.isfile(dotenv_path):
+        raise FileNotFoundError(f"Encrypted env file not found: {dotenv_path}")
 
     key_str = core.resolve_master_key(
-        master_key, search_dir=os.path.dirname(os.path.abspath(enc_file_path))
+        master_key, search_dir=os.path.dirname(os.path.abspath(dotenv_path))
     )
     key_bytes = bytearray(crypto.load_key_bytes(key_str))
 
-    with open(enc_file_path, "r", encoding="utf-8") as fh:
+    with open(dotenv_path, "r", encoding=encoding) as fh:
         text = fh.read()
 
     try:
@@ -56,15 +63,17 @@ def load_secure_dotenv(
     finally:
         crypto._zero(key_bytes)
 
+    set_any = False
     for name, value in values.items():
         if override or name not in os.environ:
             os.environ[name] = value
+            set_any = True
 
-    return values
+    return set_any
 
 
 __all__ = [
-    "load_secure_dotenv",
+    "load_env",
     "MasterKeyNotFoundError",
     "SecureDotenvError",
 ]

@@ -2,7 +2,8 @@
 
 Public API
 ----------
-* :func:`load_secure_dotenv` -- runtime loader (decrypt into ``os.environ``).
+* :func:`load_env` -- runtime loader (decrypt into ``os.environ``); drop-in for
+  ``python-dotenv``'s ``load_dotenv``.
 * :func:`encrypt_text` / :func:`decrypt_text` -- whole-file transforms.
 * :func:`decrypt_to_dict` -- decrypt into a mapping, in memory.
 * :func:`generate_master_key` / :func:`resolve_master_key` -- key helpers.
@@ -29,13 +30,13 @@ from .exceptions import (
     ParseError,
     SecureDotenvError,
 )
-from .loader import load_secure_dotenv
+from .loader import load_env
 
 __version__ = "0.1.0"
 
 __all__ = [
     "__version__",
-    "load_secure_dotenv",
+    "load_env",
     "encrypt_text",
     "decrypt_text",
     "decrypt_to_dict",

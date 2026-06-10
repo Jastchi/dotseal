@@ -99,33 +99,34 @@ print(generate_master_key())
 
 ## Runtime Loader (no cleartext on disk)
 
-Load encrypted variables directly into `os.environ` at application startup:
+`load_env` is a **drop-in replacement for `python-dotenv`'s `load_dotenv`** — it just reads an encrypted `.env.enc` instead of a cleartext `.env`. Call it once at startup and your secrets are available as ordinary environment variables through the `os` module:
 
 ```python
 import os
-from secure_dotenv import load_secure_dotenv
+from secure_dotenv import load_env
 
 # Resolves the key from SECURE_DOTENV_MASTER_KEY or .secure-dotenv.key
-load_secure_dotenv()                      # reads ".env.enc" by default
+load_env()                                # reads ".env.enc" by default
 
-os.environ["DATABASE_URL"]                # now available
+os.getenv("DATABASE_URL")                 # now available, like any env var
 ```
 
 Signature:
 
 ```python
-def load_secure_dotenv(
-    enc_file_path: str = ".env.enc",
-    master_key: str | None = None,
+def load_env(
+    dotenv_path: str = ".env.enc",
     *,
+    master_key: str | None = None,
     override: bool = False,
-) -> dict[str, str]:
+    encoding: str = "utf-8",
+) -> bool:
     ...
 ```
 
 - `override=False` (default): existing process env vars win (12-factor friendly).
 - `override=True`: decrypted values overwrite anything already in `os.environ`.
-- Returns the full decrypted mapping.
+- Returns `True` if at least one variable was set (matching `load_dotenv`). Want the values as a `dict` instead? Use `decrypt_to_dict` (below).
 
 Other programmatic helpers:
 
@@ -181,7 +182,7 @@ jobs:
       - run: secure-dotenv decrypt .env.enc .env
 
       # Option B: load at runtime inside your app (no cleartext file)
-      - run: python -c "from secure_dotenv import load_secure_dotenv; load_secure_dotenv(); import app"
+      - run: python -c "from secure_dotenv import load_env; load_env(); import app"
 ```
 
 ### Docker
@@ -194,7 +195,7 @@ WORKDIR /app
 RUN pip install secure-dotenv
 COPY .env.enc .
 COPY . .
-# App calls load_secure_dotenv() on startup.
+# App calls load_env() on startup.
 CMD ["python", "main.py"]
 ```
 
@@ -204,8 +205,8 @@ docker run -e SECURE_DOTENV_MASTER_KEY="$(cat .secure-dotenv.key)" my-image
 
 ```python
 # main.py
-from secure_dotenv import load_secure_dotenv
-load_secure_dotenv()   # picks up SECURE_DOTENV_MASTER_KEY from the container env
+from secure_dotenv import load_env
+load_env()   # picks up SECURE_DOTENV_MASTER_KEY from the container env
 ```
 
 ### Kubernetes
