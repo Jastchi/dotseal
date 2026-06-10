@@ -24,7 +24,7 @@ Git-friendly encrypted `.env` files with cleartext keys and sealed values — an
 pip install dotseal
 ```
 
-Requires Python 3.9+.
+Requires Python 3.8+.
 
 ---
 
@@ -241,6 +241,8 @@ env:
 uv venv && uv pip install -e ".[dev]"
 uv run pytest
 ```
+
+CI runs the full test suite on Python 3.8 through 3.14 (see `.github/workflows/test.yml`).
 
 The test suite covers crypto round-trips, edge-case values (empty strings, `!!@#$%=`, unicode, multi-line, large), structural parsing, the runtime loader (asserting no side-effect files are written), and the full CLI lifecycle including `edit`.
 
