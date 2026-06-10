@@ -2,5 +2,97 @@
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
     "config:recommended"
+  ],
+  "enabledManagers": ["pep621", "dockerfile", "docker-compose", "github-actions"],
+  "osvVulnerabilityAlerts": true,
+  "vulnerabilityAlerts": {
+    "enabled": true,
+    "automerge": true,
+    "minimumReleaseAge": "0 days"
+  },
+  "pep621": {
+    "rangeStrategy": "pin"
+  },
+  "github-actions": {
+    "pinDigests": true
+  },
+  "dockerfile": {
+    "pinDigests": true
+  },
+  "lockFileMaintenance": {
+    "enabled": true,
+    "automerge": true,
+    "schedule": ["every 2 weeks on monday"]
+  },
+  "automergeType": "pr",
+  "automergeStrategy": "squash",
+  "platformAutomerge": true,
+  "minimumReleaseAge": "7 days",
+  "internalChecksFilter": "strict",
+  "prCreation": "not-pending",
+  "packageRules": [
+    {
+      "description": "Never update requires-python; Python version is managed manually.",
+      "matchDepTypes": ["requires-python"],
+      "enabled": false
+    },
+    {
+      "description": "Don't gate one-time pin/pinDigest operations on minimumReleaseAge. The value being pinned is what's currently in use, so the 7-day window adds no safety here. Without this, grouped pin PRs can get stuck pending forever because at least one dependency in the group typically has a release within the last 7 days.",
+      "matchUpdateTypes": ["pin", "pinDigest"],
+      "minimumReleaseAge": "0 days"
+    },
+    {
+      "description": "Group all non-major Python (PEP 621) updates into one PR and automerge. rangeStrategy=pin ensures uv installs the exact version Renovate chose, preventing resolver drift that would bypass minimumReleaseAge.",
+      "matchManagers": ["pep621"],
+      "matchUpdateTypes": ["minor", "patch", "digest"],
+      "groupName": "Python dependencies",
+      "automerge": true
+    },
+    {
+      "description": "Group all Python (PEP 621) major updates into one PR — no automerge.",
+      "matchManagers": ["pep621"],
+      "matchUpdateTypes": ["major"],
+      "groupName": "Python major updates"
+    },
+    {
+      "description": "Group all non-major Docker image updates into one PR and automerge. Excludes the uv base image which is pinned via python-runtime.",
+      "matchManagers": ["dockerfile", "docker-compose"],
+      "matchUpdateTypes": ["minor", "patch", "digest"],
+      "groupName": "Docker dependencies",
+      "excludePackageNames": ["ghcr.io/astral-sh/uv"],
+      "automerge": true
+    },
+    {
+      "description": "Group all Docker major updates into one PR — no automerge.",
+      "matchManagers": ["dockerfile", "docker-compose"],
+      "matchUpdateTypes": ["major"],
+      "groupName": "Docker major updates"
+    },
+    {
+      "description": "Group all non-major GitHub Actions updates into one PR and automerge. Bi-weekly schedule prevents volatile actions from continuously rebasing the PR and resetting the 7-day stability timer.",
+      "matchManagers": ["github-actions"],
+      "matchUpdateTypes": ["minor", "patch", "digest"],
+      "groupName": "GitHub Actions dependencies",
+      "schedule": ["every 2 weeks on monday"],
+      "automerge": true
+    },
+    {
+      "description": "Group all GitHub Actions major updates into one PR — no automerge. Bi-weekly schedule for consistency with the non-major rule.",
+      "matchManagers": ["github-actions"],
+      "matchUpdateTypes": ["major"],
+      "groupName": "GitHub Actions major updates",
+      "schedule": ["every 2 weeks on monday"]
+    },
+    {
+      "description": "Group Python runtime version together: .python-version and the uv Docker base image must stay in sync.",
+      "matchPackageNames": ["ghcr.io/astral-sh/uv", "python"],
+      "groupName": "python-runtime"
+    },
+    {
+      "description": "Align uv Docker base tags with project.requires-python in pyproject.toml (currently >=3.9). Update this regex when changing the supported range.",
+      "matchDatasources": ["docker"],
+      "matchPackageNames": ["ghcr.io/astral-sh/uv"],
+      "allowedVersions": "/^python3\\.(9|1[0-3])-/"
+    }
   ]
 }
