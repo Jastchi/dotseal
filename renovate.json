@@ -8,7 +8,9 @@
   "vulnerabilityAlerts": {
     "enabled": true,
     "automerge": true,
-    "minimumReleaseAge": "0 days"
+    "minimumReleaseAge": "0 days",
+    "prCreation": "immediate",
+    "internalChecksFilter": "none"
   },
   "pep621": {
     "rangeStrategy": "pin"
