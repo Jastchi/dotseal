@@ -148,3 +148,42 @@ def test_unwrap_with_wrong_key_fails():
     ephem, enc = crypto.wrap_dek(crypto.load_recipient_public_key(pub), dek)
     with pytest.raises(DecryptionError):
         crypto.unwrap_dek(crypto.load_recipient_private_key(other_priv), ephem, enc)
+
+
+def test_decrypt_value_rejects_non_enc_token():
+    key = crypto.load_key_bytes(crypto.generate_master_key())
+    with pytest.raises(DecryptionError):
+        crypto.decrypt_value(key, "plain-value", aad="K")
+
+
+def test_decrypt_value_rejects_invalid_base64_payload():
+    key = crypto.load_key_bytes(crypto.generate_master_key())
+    bad = f"{crypto.ENC_PREFIX}not!valid!base64!!!{crypto.ENC_SUFFIX}"
+    with pytest.raises(DecryptionError):
+        crypto.decrypt_value(key, bad, aad="K")
+
+
+def test_decrypt_value_rejects_too_short_blob():
+    key = crypto.load_key_bytes(crypto.generate_master_key())
+    import base64
+    short = base64.b64encode(b"tooshort").decode()
+    bad = f"{crypto.ENC_PREFIX}{short}{crypto.ENC_SUFFIX}"
+    with pytest.raises(DecryptionError):
+        crypto.decrypt_value(key, bad, aad="K")
+
+
+def test_unwrap_dek_rejects_invalid_base64():
+    priv, _ = crypto.generate_recipient_keypair()
+    with pytest.raises(DecryptionError):
+        crypto.unwrap_dek(crypto.load_recipient_private_key(priv), "not!base64", "also!bad")
+
+
+def test_unwrap_dek_rejects_wrong_field_lengths():
+    import base64
+    priv, _ = crypto.generate_recipient_keypair()
+    # ephem_pub_raw with wrong length (not 32 bytes)
+    bad_ephem = base64.b64encode(b"tooshort").decode()
+    _, pub = crypto.generate_recipient_keypair()
+    _, valid_enc = crypto.wrap_dek(crypto.load_recipient_public_key(pub), crypto.generate_data_key())
+    with pytest.raises(DecryptionError):
+        crypto.unwrap_dek(crypto.load_recipient_private_key(priv), bad_ephem, valid_enc)
