@@ -37,7 +37,7 @@ Repository = "https://github.com/Jastchi/dotseal"
 
 [project.optional-dependencies]
 dev = [
-    "pytest==9.0.3; python_version < '3.10'",
+    "pytest==8.4.2; python_version < '3.10'",
     "pytest==9.0.3; python_version >= '3.10'",
     "ruff==0.15.16",
     "ty==0.0.47",
