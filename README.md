@@ -18,13 +18,17 @@ Git-friendly encrypted `.env` files with cleartext keys and sealed values — an
 
 ---
 
+![dotseal demo](.github/demo.gif)
+
+---
+
 ## Installation
 
 ```bash
 pip install dotseal
 ```
 
-Requires Python 3.8+.
+Requires Python 3.8+. Using `uv`? `uv add dotseal`.
 
 ---
 
@@ -55,6 +59,21 @@ dotseal decrypt
 | `.env.enc`            | ✅ Yes      | Keys in cleartext, values encrypted       |
 | `.env`                | ❌ No       | Full cleartext secrets                    |
 | `.dotseal.key`        | ❌ **Never**| The master key (auto-added to `.gitignore`) |
+
+---
+
+## Python Usage
+
+Drop-in replacement for `python-dotenv` — call it once at startup and your secrets are available through `os.environ`:
+
+```python
+from dotseal import load_env
+
+load_env()  # reads .env.enc, decrypts into os.environ — no cleartext file on disk
+os.getenv("DATABASE_URL")
+```
+
+The key is resolved automatically from `DOTSEAL_MASTER_KEY` or `.dotseal.key`. See [Runtime Loader](#runtime-loader-no-cleartext-on-disk) for the full API.
 
 ---
 
