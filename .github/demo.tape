@@ -1,18 +1,24 @@
 Output .github/demo.gif
 
-Set FontSize 13
-Set Width 800
-Set Height 420
-Set Theme "Catppuccin Mocha"
+Set FontSize 15
+Set Width 1100
+Set Height 500
+Set Theme "tokyonight-storm"
 Set Shell "bash"
-Set Padding 24
-Set TypingSpeed 40ms
+Set Padding 20
+Set Margin 30
+Set MarginFill "#1a1b2e"
+Set BorderRadius 10
+Set WindowBar "Colorful"
+Set WindowBarSize 28
+Set TypingSpeed 50ms
 
-# Silence the shell prompt noise and set up a clean PATH
+# Set up env silently: correct PATH, clean prompt, clear screen so
+# Show resumes on a blank terminal
 Hide
-Type "export PS1='$ ' && export PATH=$PATH:/Users/janfriedmann/Library/Python/3.9/bin && cd $(mktemp -d) && clear"
+Type "export PATH=$PATH:/Users/janfriedmann/Library/Python/3.9/bin && export PS1='$ ' && cd $(mktemp -d) && clear"
 Enter
-Sleep 300ms
+Sleep 400ms
 Show
 
 # Step 1 — generate master key
@@ -46,4 +52,4 @@ Sleep 3000ms
 # Step 5 — decrypt back to .env to prove the round-trip
 Type "rm .env && dotseal decrypt && cat .env"
 Enter
-Sleep 9000ms
+Sleep 6000ms
