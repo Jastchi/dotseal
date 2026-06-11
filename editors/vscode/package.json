@@ -1,0 +1,62 @@
+{
+  "name": "dotseal-vscode",
+  "displayName": "dotseal",
+  "description": "Edit dotseal .env.enc files as decrypted virtual documents.",
+  "version": "0.1.0",
+  "publisher": "dotseal",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.92.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished",
+    "onFileSystem:dotseal",
+    "onCommand:dotseal.openEncrypted"
+  ],
+  "main": "./dist/extension.js",
+  "scripts": {
+    "build": "node esbuild.mjs",
+    "watch": "node esbuild.mjs --watch",
+    "check": "tsc --noEmit",
+    "test": "vitest run",
+    "pretest": "npm run build && npm run check"
+  },
+  "contributes": {
+    "commands": [
+      {
+        "command": "dotseal.openEncrypted",
+        "title": "Dotseal: Open Encrypted Env"
+      }
+    ],
+    "configuration": {
+      "title": "dotseal",
+      "properties": {
+        "dotseal.autoOpen": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically open .env.enc files through dotseal's decrypted virtual editor."
+        },
+        "dotseal.keyFile": {
+          "type": "string",
+          "default": "",
+          "description": "Optional path to a dotseal master key file. When empty, dotseal searches upward for .dotseal.key."
+        },
+        "dotseal.masterKey": {
+          "type": "string",
+          "default": "",
+          "description": "Optional base64 dotseal master key. Prefer DOTSEAL_MASTER_KEY or .dotseal.key instead of storing secrets in editor settings."
+        }
+      }
+    }
+  },
+  "devDependencies": {
+    "@types/node": "^25.9.3",
+    "@types/vscode": "^1.120.0",
+    "esbuild": "^0.28.0",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.8"
+  }
+}
