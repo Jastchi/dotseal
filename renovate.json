@@ -3,7 +3,7 @@
   "extends": [
     "config:recommended"
   ],
-  "enabledManagers": ["pep621", "dockerfile", "docker-compose", "github-actions"],
+  "enabledManagers": ["pep621", "github-actions", "uv"],
   "osvVulnerabilityAlerts": true,
   "vulnerabilityAlerts": {
     "enabled": true,
@@ -16,9 +16,6 @@
     "rangeStrategy": "pin"
   },
   "github-actions": {
-    "pinDigests": true
-  },
-  "dockerfile": {
     "pinDigests": true
   },
   "lockFileMaintenance": {
@@ -44,9 +41,10 @@
       "minimumReleaseAge": "0 days"
     },
     {
-      "description": "Group all non-major Python (PEP 621) updates into one PR and automerge. rangeStrategy=pin ensures uv installs the exact version Renovate chose, preventing resolver drift that would bypass minimumReleaseAge.",
+      "description": "Group all non-major Python (PEP 621) updates into one PR and automerge. Excludes ruff and ty which are managed separately. rangeStrategy=pin ensures uv installs the exact version Renovate chose, preventing resolver drift that would bypass minimumReleaseAge.",
       "matchManagers": ["pep621"],
       "matchUpdateTypes": ["minor", "patch", "digest"],
+      "matchPackageNames": ["!ruff", "!ty"],
       "groupName": "Python dependencies",
       "automerge": true
     },
@@ -55,22 +53,6 @@
       "matchManagers": ["pep621"],
       "matchUpdateTypes": ["major"],
       "groupName": "Python major updates"
-    },
-    {
-      "description": "Group all non-major Docker image updates into one PR and automerge. Excludes the uv base image which is pinned via python-runtime.",
-      "matchManagers": ["dockerfile", "docker-compose"],
-      "matchUpdateTypes": ["minor", "patch", "digest"],
-      "groupName": "Docker dependencies",
-      "automerge": true,
-      "matchPackageNames": [
-        "!ghcr.io/astral-sh/uv"
-      ]
-    },
-    {
-      "description": "Group all Docker major updates into one PR — no automerge.",
-      "matchManagers": ["dockerfile", "docker-compose"],
-      "matchUpdateTypes": ["major"],
-      "groupName": "Docker major updates"
     },
     {
       "description": "Group all non-major GitHub Actions updates into one PR and automerge. Bi-weekly schedule prevents volatile actions from continuously rebasing the PR and resetting the 7-day stability timer.",
@@ -88,15 +70,11 @@
       "schedule": ["every 2 weeks on monday"]
     },
     {
-      "description": "Group Python runtime version together: .python-version and the uv Docker base image must stay in sync.",
-      "matchPackageNames": ["ghcr.io/astral-sh/uv", "python"],
-      "groupName": "python-runtime"
-    },
-    {
-      "description": "Align uv Docker base tags with project.requires-python in pyproject.toml (currently >=3.9). Update this regex when changing the supported range.",
-      "matchDatasources": ["docker"],
-      "matchPackageNames": ["ghcr.io/astral-sh/uv"],
-      "allowedVersions": "/^python3\\.(9|1[0-3])-/"
+      "description": "ruff and ty: allow pre-release versioning so updates are never suppressed. The global 7-day minimumReleaseAge still applies; vulnerabilityAlerts overrides it to immediate for security fixes.",
+      "matchPackageNames": ["ruff", "ty"],
+      "ignoreUnstable": false,
+      "automerge": true,
+      "groupName": "dev tools"
     }
   ]
 }
