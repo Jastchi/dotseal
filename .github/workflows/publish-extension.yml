@@ -24,6 +24,9 @@ jobs:
       working-directory: editors/vscode
       run: npm ci
 
+    - name: Copy LICENSE
+      run: cp LICENSE editors/vscode/LICENSE
+
     - name: Build extension
       working-directory: editors/vscode
       run: npm run build
