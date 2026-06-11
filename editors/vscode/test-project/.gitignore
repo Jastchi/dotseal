@@ -1,0 +1,5 @@
+# Added by `dotseal init` -- never commit your master key
+# .dotseal.key # Commit for testing
+
+# Allow the test .env (fake values, safe to commit)
+!.env

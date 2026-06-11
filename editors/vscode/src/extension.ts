@@ -18,6 +18,11 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand("dotseal.openEncrypted", openEncrypted),
     vscode.workspace.onDidOpenTextDocument((document) => {
       void maybeRedirectEncryptedDocument(document);
+    }),
+    vscode.window.onDidChangeActiveTextEditor((editor) => {
+      if (editor !== undefined) {
+        void maybeRedirectEncryptedDocument(editor.document);
+      }
     })
   );
 }

@@ -40,10 +40,55 @@ This initial version does not mask values or implement per-value reveal. The `do
 
 ## Development
 
+### Prerequisites
+
+- [Node.js](https://nodejs.org) (LTS)
+- [uv](https://docs.astral.sh/uv/) — only needed to run the Python conformance tests
+
+### Setup
+
 ```bash
+cd editors/vscode
 npm install
-npm run check
-npm test
+```
+
+### Running the extension locally
+
+Open the `editors/vscode` folder in VS Code, then press **F5**. This starts esbuild in watch mode and launches a second **Extension Development Host** window with the extension loaded.
+
+- Any `.ts` change triggers an automatic rebuild.
+- After a rebuild, press `Ctrl+Shift+P` → **Developer: Reload Window** in the Extension Development Host to pick up the new code.
+- Stop the session with **Shift+F5**.
+
+### Test fixture
+
+`test-project/` is a small [uv](https://docs.astral.sh/uv/) project for manual testing. It contains a `.env` with fake values and a pre-encrypted `.env.enc`. To use it:
+
+1. Generate a fresh key in the test project:
+   ```bash
+   cd test-project
+   uv run dotseal init
+   uv run dotseal encrypt
+   ```
+2. Open the Extension Development Host, then open `test-project/.env.enc`. The extension should redirect it to a decrypted virtual document.
+
+> `.dotseal.key` is gitignored. The `.env` is committed because the values are fake, but never commit a real `.env` with actual secrets.
+
+### Checks and tests
+
+```bash
+npm run check   # TypeScript type-check (no emit)
+npm test        # unit tests + Python conformance tests
 ```
 
 The test suite includes TypeScript unit tests and `conformance.test.ts`, which compares crypto, parser, core, and key-discovery behavior against the Python package in this repository.
+
+### Packaging
+
+To produce a `.vsix` for local installation:
+
+```bash
+npm install -g @vscode/vsce
+vsce package
+code --install-extension dotseal-vscode-*.vsix
+```
