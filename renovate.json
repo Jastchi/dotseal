@@ -61,8 +61,10 @@
       "matchManagers": ["dockerfile", "docker-compose"],
       "matchUpdateTypes": ["minor", "patch", "digest"],
       "groupName": "Docker dependencies",
-      "excludePackageNames": ["ghcr.io/astral-sh/uv"],
-      "automerge": true
+      "automerge": true,
+      "matchPackageNames": [
+        "!ghcr.io/astral-sh/uv"
+      ]
     },
     {
       "description": "Group all Docker major updates into one PR — no automerge.",
