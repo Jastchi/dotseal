@@ -19,18 +19,24 @@ def load_env(
     dotenv_path: str = ".env.enc",
     *,
     master_key: Optional[str] = None,
+    private_key: Optional[str] = None,
     override: bool = False,
     encoding: str = "utf-8",
 ) -> bool:
     """Decrypt ``dotenv_path`` in memory and inject the values into ``os.environ``.
 
     Mirrors ``python-dotenv``'s ``load_dotenv`` so it can be used as a drop-in
-    replacement, but reads a structurally-encrypted ``.env.enc`` file.
+    replacement, but reads a structurally-encrypted ``.env.enc`` file. The
+    encryption mode (symmetric master key vs. asymmetric X25519 recipients) is
+    auto-detected from the file's metadata.
 
     Args:
         dotenv_path: path to the encrypted env file (default ``".env.enc"``).
-        master_key: base64 master key. If ``None``, it is resolved from the
-            ``DOTSEAL_MASTER_KEY`` env var or a local key file.
+        master_key: base64 master key for symmetric files. If ``None``, it is
+            resolved from the ``DOTSEAL_MASTER_KEY`` env var or a local key file.
+        private_key: ``dsk-prv-...`` recipient private key for asymmetric files.
+            If ``None``, it is resolved from the ``DOTSEAL_PRIVATE_KEY`` env var
+            or a local ``.dotseal.prv`` file.
         override: if ``False`` (default), variables already present in
             ``os.environ`` are left untouched (the process environment wins,
             which matches typical 12-factor behavior). If ``True``, decrypted
@@ -44,24 +50,27 @@ def load_env(
 
     Raises:
         FileNotFoundError: if ``dotenv_path`` does not exist.
-        MasterKeyNotFoundError / DecryptionError / KeyFingerprintMismatchError:
+        MasterKeyNotFoundError / PrivateKeyNotFoundError / DecryptionError /
+        KeyFingerprintMismatchError / RecipientNotFoundError:
             on key resolution or decryption problems.
     """
     if not os.path.isfile(dotenv_path):
         raise FileNotFoundError(f"Encrypted env file not found: {dotenv_path}")
 
-    key_str = core.resolve_master_key(
-        master_key, search_dir=os.path.dirname(os.path.abspath(dotenv_path))
-    )
-    key_bytes = bytearray(crypto.load_key_bytes(key_str))
-
+    search_dir = os.path.dirname(os.path.abspath(dotenv_path))
     with open(dotenv_path, "r", encoding=encoding) as fh:
         text = fh.read()
 
-    try:
-        values = core.decrypt_to_dict(text, bytes(key_bytes))
-    finally:
-        crypto._zero(key_bytes)
+    if core.file_mode(text) == "asymmetric":
+        priv = core.resolve_private_key(private_key, search_dir=search_dir)
+        values = core.decrypt_to_dict_asymmetric(text, priv)
+    else:
+        key_str = core.resolve_master_key(master_key, search_dir=search_dir)
+        key_bytes = bytearray(crypto.load_key_bytes(key_str))
+        try:
+            values = core.decrypt_to_dict(text, bytes(key_bytes))
+        finally:
+            crypto._zero(key_bytes)
 
     set_any = False
     for name, value in values.items():

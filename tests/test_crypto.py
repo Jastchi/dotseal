@@ -3,7 +3,11 @@ import base64
 import pytest
 
 from dotseal import crypto
-from dotseal.exceptions import DecryptionError, InvalidMasterKeyError
+from dotseal.exceptions import (
+    DecryptionError,
+    InvalidMasterKeyError,
+    InvalidRecipientKeyError,
+)
 
 
 def test_generate_master_key_is_32_bytes_base64():
@@ -80,3 +84,67 @@ def test_roundtrip_edge_values(value):
     key = crypto.load_key_bytes(crypto.generate_master_key())
     token = crypto.encrypt_value(key, value, aad="K")
     assert crypto.decrypt_value(key, token, aad="K") == value
+
+
+# --- Asymmetric (X25519 recipient) primitives -------------------------------
+
+def test_generate_recipient_keypair_format():
+    priv, pub = crypto.generate_recipient_keypair()
+    assert priv.startswith(crypto.PRIVKEY_PREFIX)
+    assert pub.startswith(crypto.PUBKEY_PREFIX)
+    # both halves decode to 32 raw bytes
+    assert len(base64.b64decode(priv[len(crypto.PRIVKEY_PREFIX):])) == 32
+    assert len(base64.b64decode(pub[len(crypto.PUBKEY_PREFIX):])) == 32
+
+
+def test_public_key_str_from_private_matches_generated():
+    priv, pub = crypto.generate_recipient_keypair()
+    assert crypto.public_key_str_from_private(priv) == pub
+
+
+def test_recipient_keys_reject_swapped_halves():
+    priv, pub = crypto.generate_recipient_keypair()
+    with pytest.raises(InvalidRecipientKeyError):
+        crypto.load_recipient_public_key(priv)  # private given where public expected
+    with pytest.raises(InvalidRecipientKeyError):
+        crypto.load_recipient_private_key(pub)
+
+
+@pytest.mark.parametrize("bad", ["", "   ", "dsk-pub-not-base64!!!", "no-prefix"])
+def test_load_recipient_public_rejects_invalid(bad):
+    with pytest.raises(InvalidRecipientKeyError):
+        crypto.load_recipient_public_key(bad)
+
+
+def test_recipient_fingerprint_stable_and_distinct():
+    _, pub1 = crypto.generate_recipient_keypair()
+    _, pub2 = crypto.generate_recipient_keypair()
+    assert crypto.recipient_fingerprint(pub1) == crypto.recipient_fingerprint(pub1)
+    assert len(crypto.recipient_fingerprint(pub1)) == 16
+    assert crypto.recipient_fingerprint(pub1) != crypto.recipient_fingerprint(pub2)
+
+
+def test_wrap_unwrap_dek_roundtrip():
+    priv, pub = crypto.generate_recipient_keypair()
+    dek = crypto.generate_data_key()
+    ephem, enc = crypto.wrap_dek(crypto.load_recipient_public_key(pub), dek)
+    recovered = crypto.unwrap_dek(crypto.load_recipient_private_key(priv), ephem, enc)
+    assert recovered == dek
+
+
+def test_wrap_is_nondeterministic():
+    _, pub = crypto.generate_recipient_keypair()
+    dek = crypto.generate_data_key()
+    pub_obj = crypto.load_recipient_public_key(pub)
+    a = crypto.wrap_dek(pub_obj, dek)
+    b = crypto.wrap_dek(pub_obj, dek)
+    assert a != b  # fresh ephemeral key each time
+
+
+def test_unwrap_with_wrong_key_fails():
+    _, pub = crypto.generate_recipient_keypair()
+    other_priv, _ = crypto.generate_recipient_keypair()
+    dek = crypto.generate_data_key()
+    ephem, enc = crypto.wrap_dek(crypto.load_recipient_public_key(pub), dek)
+    with pytest.raises(DecryptionError):
+        crypto.unwrap_dek(crypto.load_recipient_private_key(other_priv), ephem, enc)
