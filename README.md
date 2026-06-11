@@ -1,5 +1,12 @@
 # dotseal
 
+[![Tests](https://github.com/Jastchi/dotseal/actions/workflows/test.yml/badge.svg)](https://github.com/Jastchi/dotseal/actions/workflows/test.yml)
+[![Lint](https://github.com/Jastchi/dotseal/actions/workflows/lint.yml/badge.svg)](https://github.com/Jastchi/dotseal/actions/workflows/lint.yml)
+[![codecov](https://codecov.io/gh/Jastchi/dotseal/branch/main/graph/badge.svg)](https://codecov.io/gh/Jastchi/dotseal)
+[![PyPI](https://img.shields.io/pypi/v/dotseal)](https://pypi.org/project/dotseal/)
+[![Python](https://img.shields.io/pypi/pyversions/dotseal)](https://pypi.org/project/dotseal/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 Git-friendly encrypted `.env` files with cleartext keys and sealed values — an offline-first environment-variable manager for Python, inspired by [Mozilla SOPS](https://github.com/getsops/sops) but built natively for the Python ecosystem.
 
 `dotseal` performs **structural encryption**: it leaves your `.env` **keys in cleartext** and encrypts only the **values**. The result is a `.env.enc` file you can safely commit, review in pull requests, and merge — because the diff still shows *which* variables changed, just not their secret contents.
