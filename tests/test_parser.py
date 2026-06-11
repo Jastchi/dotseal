@@ -60,3 +60,9 @@ def test_format_then_parse_roundtrip_special_values():
 def test_invalid_line_raises():
     with pytest.raises(ParseError):
         parser.parse("this is not valid\n")
+
+
+def test_serialize_blank_line():
+    parsed = parser.parse("FOO=bar\n\nBAZ=qux\n")
+    result = parser.serialize(parsed)
+    assert result == "FOO=bar\n\nBAZ=qux\n"

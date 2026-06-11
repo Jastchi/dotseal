@@ -150,6 +150,23 @@ def test_unwrap_with_wrong_key_fails():
         crypto.unwrap_dek(crypto.load_recipient_private_key(other_priv), ephem, enc)
 
 
+def test_load_key_bytes_rejects_non_string():
+    with pytest.raises(InvalidMasterKeyError):
+        crypto.load_key_bytes(12345)  # type: ignore[arg-type]
+
+
+def test_load_recipient_public_rejects_non_string():
+    with pytest.raises(InvalidRecipientKeyError):
+        crypto.load_recipient_public_key(42)  # type: ignore[arg-type]
+
+
+def test_load_recipient_public_rejects_wrong_length():
+    import base64
+    short = crypto.PUBKEY_PREFIX + base64.b64encode(b"tooshort").decode()
+    with pytest.raises(InvalidRecipientKeyError):
+        crypto.load_recipient_public_key(short)
+
+
 def test_decrypt_value_rejects_non_enc_token():
     key = crypto.load_key_bytes(crypto.generate_master_key())
     with pytest.raises(DecryptionError):

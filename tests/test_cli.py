@@ -154,6 +154,25 @@ def test_keygen_out_outside_cwd_skips_gitignore(project, tmp_path):
     assert not (project / ".gitignore").exists()
 
 
+def test_secure_delete_survives_overwrite_oserror(tmp_path, monkeypatch):
+    from dotseal.cli import _secure_delete
+    path = str(tmp_path / "file.txt")
+    with open(path, "w") as fh:
+        fh.write("secret")
+    monkeypatch.setattr(os.path, "getsize", lambda p: (_ for _ in ()).throw(OSError("disk")))
+    _secure_delete(path)  # must not raise; file should be unlinked
+    assert not os.path.exists(path)
+
+
+def test_secure_delete_survives_unlink_oserror(tmp_path, monkeypatch):
+    from dotseal.cli import _secure_delete
+    path = str(tmp_path / "file.txt")
+    with open(path, "w") as fh:
+        fh.write("secret")
+    monkeypatch.setattr(os, "unlink", lambda p: (_ for _ in ()).throw(OSError("locked")))
+    _secure_delete(path)  # must not raise
+
+
 def test_edit_new_file_symmetric(project, monkeypatch):
     editor_script = project / "fake_editor.py"
     editor_script.write_text(
@@ -163,6 +182,18 @@ def test_edit_new_file_symmetric(project, monkeypatch):
     assert main(["init"]) == 0
     assert main(["edit", "brand-new.env.enc"]) == 0
     assert (project / "brand-new.env.enc").is_file()
+
+
+def test_edit_new_file_asymmetric(project, monkeypatch):
+    editor_script = project / "fake_editor.py"
+    editor_script.write_text(
+        "import sys\nopen(sys.argv[1], 'w').write('NEW=value\\n')\n"
+    )
+    monkeypatch.setenv("EDITOR", f"{sys.executable} {editor_script}")
+    _, pub = crypto.generate_recipient_keypair()
+    assert main(["edit", "brand-new-asym.env.enc", "-r", pub]) == 0
+    enc = (project / "brand-new-asym.env.enc").read_text()
+    assert core.file_mode(enc) == "asymmetric"
 
 
 def test_edit_editor_not_found(project, monkeypatch):
