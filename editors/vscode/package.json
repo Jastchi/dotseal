@@ -13,7 +13,7 @@
     "url": "https://github.com/Jastchi/dotseal/issues"
   },
   "engines": {
-    "vscode": "^1.92.0"
+    "vscode": "^1.120.0"
   },
   "categories": [
     "Other"
