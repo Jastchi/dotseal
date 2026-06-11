@@ -1,0 +1,39 @@
+name: Publish VS Code Extension
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  package-vscode:
+    if: startsWith(github.ref, 'refs/tags/ext-v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Node
+      uses: actions/setup-node@v4
+      with:
+        node-version: 22
+
+    - name: Install dependencies
+      working-directory: editors/vscode
+      run: npm ci
+
+    - name: Build extension
+      working-directory: editors/vscode
+      run: npm run build
+
+    - name: Package extension
+      working-directory: editors/vscode
+      run: npx @vscode/vsce package
+
+    - name: Upload to release
+      working-directory: editors/vscode
+      run: gh release upload ${{ github.ref_name }} *.vsix
+      env:
+        GH_TOKEN: ${{ github.token }}

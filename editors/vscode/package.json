@@ -5,6 +5,13 @@
   "version": "0.1.0",
   "publisher": "dotseal",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Jastchi/dotseal"
+  },
+  "bugs": {
+    "url": "https://github.com/Jastchi/dotseal/issues"
+  },
   "engines": {
     "vscode": "^1.92.0"
   },
