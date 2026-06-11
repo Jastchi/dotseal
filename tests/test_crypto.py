@@ -152,12 +152,12 @@ def test_unwrap_with_wrong_key_fails():
 
 def test_load_key_bytes_rejects_non_string():
     with pytest.raises(InvalidMasterKeyError):
-        crypto.load_key_bytes(12345)  # type: ignore[arg-type]
+        crypto.load_key_bytes(12345)  # type: ignore[invalid-argument-type]
 
 
 def test_load_recipient_public_rejects_non_string():
     with pytest.raises(InvalidRecipientKeyError):
-        crypto.load_recipient_public_key(42)  # type: ignore[arg-type]
+        crypto.load_recipient_public_key(42)  # type: ignore[invalid-argument-type]
 
 
 def test_load_recipient_public_rejects_wrong_length():
