@@ -38,6 +38,8 @@ pip install dotseal
 
 Requires Python 3.8+. Using `uv`? `uv add dotseal`.
 
+**VS Code / Cursor extension:** download the latest `.vsix` from [GitHub Releases](https://github.com/Jastchi/dotseal/releases) and install via *Extensions: Install from VSIX*.
+
 ---
 
 ## Quickstart
