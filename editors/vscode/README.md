@@ -46,4 +46,4 @@ npm run check
 npm test
 ```
 
-The test suite includes TypeScript unit tests and cross-language conformance checks against the Python package in this repository.
+The test suite includes TypeScript unit tests and `conformance.test.ts`, which compares crypto, parser, core, and key-discovery behavior against the Python package in this repository.

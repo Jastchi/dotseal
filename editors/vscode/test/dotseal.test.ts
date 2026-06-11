@@ -1,6 +1,3 @@
-import * as fs from "node:fs";
-import * as path from "node:path";
-import { spawnSync } from "node:child_process";
 import { describe, expect, it } from "vitest";
 import {
   decryptText,
@@ -15,9 +12,7 @@ import {
 } from "../src/dotseal/crypto";
 import { parse, serialize, formatValue } from "../src/dotseal/parser";
 
-const keyString = Buffer.alloc(32, 1).toString("base64");
-const keyBytes = loadKeyBytes(keyString);
-const repoRoot = path.resolve(__dirname, "../../..");
+const keyBytes = loadKeyBytes(Buffer.alloc(32, 1).toString("base64"));
 
 describe("dotseal crypto", () => {
   it("encrypts and decrypts a value with AAD binding", () => {
@@ -84,66 +79,3 @@ describe("dotseal core", () => {
     expect(encrypted).not.toMatch(/\n\n# dotseal:/);
   });
 });
-
-describe("Python conformance", () => {
-  it("decrypts TypeScript-encrypted text with Python", () => {
-    const cleartext = "# user comment\nDATABASE_URL=postgres://example\nDEBUG=True\n";
-    const encrypted = encryptText(cleartext, keyBytes);
-    const decrypted = runPython("decrypt", encrypted);
-
-    expect(decrypted).toBe(cleartext);
-  });
-
-  it("decrypts Python-encrypted text with TypeScript", () => {
-    const cleartext = "# user comment\nDATABASE_URL=postgres://example\nDEBUG=True\n";
-    const encrypted = runPython("encrypt", cleartext);
-
-    expect(decryptText(encrypted, keyBytes)).toBe(cleartext);
-  });
-
-  it("agrees with Python on empty values in both directions", () => {
-    const cleartext = "API_KEY=secret\nEMPTY=\n";
-
-    expect(runPython("decrypt", encryptText(cleartext, keyBytes))).toBe(cleartext);
-    expect(decryptText(runPython("encrypt", cleartext), keyBytes)).toBe(cleartext);
-  });
-});
-
-function runPython(mode: "encrypt" | "decrypt", input: string): string {
-  const python = findPython();
-  const script = [
-    "import sys",
-    "from dotseal import core, crypto",
-    "key = crypto.load_key_bytes(sys.argv[2])",
-    "text = sys.stdin.read()",
-    "if sys.argv[1] == 'encrypt':",
-    "    sys.stdout.write(core.encrypt_text(text, key))",
-    "elif sys.argv[1] == 'decrypt':",
-    "    sys.stdout.write(core.decrypt_text(text, key))",
-    "else:",
-    "    raise SystemExit(2)"
-  ].join("\n");
-
-  const result = spawnSync(python, ["-c", script, mode, keyString], {
-    cwd: repoRoot,
-    input,
-    encoding: "utf8"
-  });
-
-  if (result.status !== 0) {
-    throw new Error(result.stderr || `Python exited with ${result.status}`);
-  }
-
-  return result.stdout;
-}
-
-function findPython(): string {
-  if (process.env.DOTSEAL_PYTHON) {
-    return process.env.DOTSEAL_PYTHON;
-  }
-  const venvPython = path.join(repoRoot, ".venv", "bin", "python");
-  if (fs.existsSync(venvPython)) {
-    return venvPython;
-  }
-  return "python3";
-}
