@@ -70,12 +70,6 @@
       "schedule": ["every 2 weeks on monday"]
     },
     {
-      "description": "Keep the pytest<3.10 entry on 8.x. pytest 9+ requires Python>=3.10, so the marker entry for older Pythons must stay below 9. matchCurrentVersion targets only the 8.x pin; the 9.x pin is unaffected.",
-      "matchPackageNames": ["pytest"],
-      "matchCurrentVersion": ">=8.0.0 <9.0.0",
-      "allowedVersions": ">=8.0.0 <9.0.0"
-    },
-    {
       "description": "ruff and ty: allow pre-release versioning so updates are never suppressed. The global 7-day minimumReleaseAge still applies; vulnerabilityAlerts overrides it to immediate for security fixes.",
       "matchPackageNames": ["ruff", "ty"],
       "ignoreUnstable": false,
