@@ -7,4 +7,4 @@ Download the latest `.vsix` from [GitHub Releases](https://github.com/Jastchi/do
 - VS Code: "Extensions: Install from VSIX..."
 - Cursor: "Extensions: Install from VSIX..."
 
-The extension helps with encrypted dotenv-style env files (`.env.enc`, `.env.production.enc`, and similar) inside the editor, while encryption and decryption remain handled by the `dotseal` CLI and library.
+The extension helps with encrypted `.env.enc` workflows inside the editor, while encryption and decryption remain handled by the `dotseal` CLI and library.
