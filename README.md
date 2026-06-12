@@ -52,7 +52,7 @@ load_env()  # reads .env.enc and injects decrypted values into os.environ
 - Start with the default flow above if you work solo or in a small trusted setup.
 - Use collaborator mode when multiple people need access without sharing one secret key.
 - If you are unsure, start with the default and switch later when team-sharing needs grow.
-- Details: [Asymmetric mode](docs/ASYMMETRIC.md), [Key management](docs/KEY_MANAGEMENT.md).
+- Details: [Asymmetric mode](https://github.com/Jastchi/dotseal/blob/main/docs/ASYMMETRIC.md), [Key management](https://github.com/Jastchi/dotseal/blob/main/docs/KEY_MANAGEMENT.md).
 
 ## What gets committed?
 
@@ -68,13 +68,13 @@ load_env()  # reads .env.enc and injects decrypted values into os.environ
 
 Use the docs as the source of truth for all details:
 
-- [Documentation index](docs/README.md)
-- [Usage and CLI](docs/USAGE.md)
-- [Key management and rotation](docs/KEY_MANAGEMENT.md)
-- [Asymmetric mode](docs/ASYMMETRIC.md)
-- [CI/CD and deployment](docs/DEPLOYMENT.md)
-- [On-disk file format](docs/FILE_FORMAT.md)
-- [Editor integration](docs/EDITORS.md)
+- [Documentation index](https://github.com/Jastchi/dotseal/blob/main/docs/README.md)
+- [Usage and CLI](https://github.com/Jastchi/dotseal/blob/main/docs/USAGE.md)
+- [Key management and rotation](https://github.com/Jastchi/dotseal/blob/main/docs/KEY_MANAGEMENT.md)
+- [Asymmetric mode](https://github.com/Jastchi/dotseal/blob/main/docs/ASYMMETRIC.md)
+- [CI/CD and deployment](https://github.com/Jastchi/dotseal/blob/main/docs/DEPLOYMENT.md)
+- [On-disk file format](https://github.com/Jastchi/dotseal/blob/main/docs/FILE_FORMAT.md)
+- [Editor integration](https://github.com/Jastchi/dotseal/blob/main/docs/EDITORS.md)
 
 ## Security
 
@@ -82,11 +82,11 @@ Use the docs as the source of truth for all details:
 - Variable names are bound as AAD, so ciphertext cannot be swapped across keys.
 - Integrity is per value (review `.env.enc` changes like code changes).
 
-Report vulnerabilities privately via [SECURITY.md](SECURITY.md).
+Report vulnerabilities privately via [SECURITY.md](https://github.com/Jastchi/dotseal/blob/main/SECURITY.md).
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md).
+See [CONTRIBUTING.md](https://github.com/Jastchi/dotseal/blob/main/CONTRIBUTING.md).
 
 ## License
 
