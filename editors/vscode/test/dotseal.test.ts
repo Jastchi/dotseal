@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   decryptText,
   encryptText,
-  parseMetadata
+  parseMetadata,
+  reencryptText
 } from "../src/dotseal/core";
 import {
   decryptValue,
@@ -77,5 +78,72 @@ describe("dotseal core", () => {
     const encrypted = encryptText("A=1\n\n", keyBytes);
 
     expect(encrypted).not.toMatch(/\n\n# dotseal:/);
+  });
+});
+
+describe("dotseal core re-encryption guards", () => {
+  const otherKey = loadKeyBytes(Buffer.alloc(32, 2).toString("base64"));
+
+  it("refuses to re-encrypt a file made with a different key", () => {
+    const encrypted = encryptText("FOO=bar\n", keyBytes);
+
+    expect(() => encryptText(encrypted, otherKey)).toThrow(/does not match/);
+  });
+
+  it("is idempotent when re-encrypting with the same key", () => {
+    const encrypted = encryptText("FOO=bar\n", keyBytes);
+
+    expect(decryptText(encryptText(encrypted, keyBytes), keyBytes)).toBe("FOO=bar\n");
+  });
+
+  it("rejects ENC lookalike values without dotseal metadata", () => {
+    expect(() => encryptText("SNEAKY=ENC[AES_GCM,data:aGVsbG8=]\n", keyBytes)).toThrow(
+      /cannot be verified/
+    );
+  });
+
+  it("rejects asymmetric (v=2) files with a clear message", () => {
+    const asym =
+      "FOO=ENC[AES_GCM,data:aGVsbG8=]\n" +
+      "# dotseal:recipient fp=abc ephem=def enc=ghi\n" +
+      "# dotseal: v=2 alg=AES_GCM+X25519\n";
+
+    expect(() => decryptText(asym, keyBytes)).toThrow(/asymmetric/);
+    expect(() => encryptText(asym, keyBytes)).toThrow(/asymmetric/);
+  });
+
+  it("parseMetadata skips recipient lines and reads the footer", () => {
+    const asym =
+      "# dotseal:recipient fp=abc ephem=def enc=ghi\n" +
+      "# dotseal: v=2 alg=AES_GCM+X25519\n";
+    const meta = parseMetadata(parse(asym));
+
+    expect(meta.get("v")).toBe("2");
+    expect(meta.get("fp")).toBeUndefined();
+  });
+});
+
+describe("dotseal core reencryptText", () => {
+  it("reuses ciphertexts for unchanged values", () => {
+    const original = encryptText("KEEP=same\nCHANGE=old\n", keyBytes);
+    const tokens = new Map(
+      parse(original).records.filter((r) => r.kind === "entry").map((r) => [r.key, r.value])
+    );
+
+    const result = reencryptText("KEEP=same\nCHANGE=new\n", keyBytes, original);
+    const newTokens = new Map(
+      parse(result).records.filter((r) => r.kind === "entry").map((r) => [r.key, r.value])
+    );
+
+    expect(newTokens.get("KEEP")).toBe(tokens.get("KEEP"));
+    expect(newTokens.get("CHANGE")).not.toBe(tokens.get("CHANGE"));
+    expect(decryptText(result, keyBytes)).toBe("KEEP=same\nCHANGE=new\n");
+  });
+
+  it("refuses a wrong key via the fingerprint", () => {
+    const otherKey = loadKeyBytes(Buffer.alloc(32, 2).toString("base64"));
+    const original = encryptText("FOO=bar\n", keyBytes);
+
+    expect(() => reencryptText("FOO=baz\n", otherKey, original)).toThrow(/does not match/);
   });
 });

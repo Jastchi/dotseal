@@ -13,6 +13,7 @@ Commands:
 from __future__ import annotations
 
 import argparse
+import fnmatch
 import os
 import shlex
 import subprocess
@@ -90,13 +91,26 @@ def _secure_delete(path: str) -> None:
 
 # --- gitignore handling -----------------------------------------------------
 
+def _gitignore_line_covers(line: str, name: str) -> bool:
+    """True if a single .gitignore line already ignores ``name``.
+
+    Handles exact entries and simple glob patterns (e.g. ``*.key``); negations
+    and comments never count as covering.
+    """
+    entry = line.strip()
+    if not entry or entry.startswith(("#", "!")):
+        return False
+    entry = entry.rstrip("/").lstrip("/")
+    return entry == name or fnmatch.fnmatch(name, entry)
+
+
 def _ensure_gitignored(name: str, directory: str) -> str:
     """Make sure ``name`` is ignored by git. Returns a human-readable status."""
     gitignore = os.path.join(directory, ".gitignore")
     if os.path.isfile(gitignore):
         with open(gitignore, "r", encoding="utf-8") as fh:
             content = fh.read()
-        if any(line.strip() == name for line in content.splitlines()):
+        if any(_gitignore_line_covers(line, name) for line in content.splitlines()):
             return f"{name} already present in .gitignore"
         sep = "" if content.endswith("\n") or content == "" else "\n"
         with open(gitignore, "a", encoding="utf-8") as fh:
@@ -216,6 +230,15 @@ def cmd_decrypt(args: argparse.Namespace) -> int:
     return 0
 
 
+def _ask_reopen_editor() -> bool:
+    """Ask (interactively) whether to re-open the editor after a failure."""
+    try:
+        answer = input("Re-open the editor to fix it? [Y/n] ")
+    except EOFError:
+        return False
+    return not answer.strip().lower().startswith("n")
+
+
 def cmd_edit(args: argparse.Namespace) -> int:
     search_dir = os.path.dirname(os.path.abspath(args.input))
     original_text = None
@@ -238,48 +261,74 @@ def cmd_edit(args: argparse.Namespace) -> int:
         recipients = _collect_recipients(args)
         is_asym = bool(recipients)
         if not is_asym:
-            key_bytes = bytearray(_resolve_key_bytes(args, search_dir=search_dir))
-            crypto._zero(key_bytes)
+            # Fail fast (missing/invalid key) before the user invests editing time.
+            _resolve_key_bytes(args, search_dir=search_dir)
         cleartext = "# New encrypted env file. Add KEY=value lines.\n"
 
     fd, tmp_path = tempfile.mkstemp(suffix=".env", prefix=".dotseal-edit-")
+    keep_tmp = False
     try:
         os.fchmod(fd, 0o600)
         with os.fdopen(fd, "w", encoding="utf-8") as fh:
             fh.write(cleartext)
 
         editor = os.environ.get("EDITOR", "nano")
-        cmd = shlex.split(editor) + [tmp_path]
-        try:
-            result = subprocess.run(cmd)
-        except FileNotFoundError:
-            _err(f"Editor not found: {editor!r}. Set $EDITOR to a valid editor.")
-            return 1
-        if result.returncode != 0:
-            _err(f"Editor exited with status {result.returncode}; aborting (no changes saved).")
-            return 1
-
-        with open(tmp_path, "r", encoding="utf-8") as fh:
-            edited = fh.read()
-
-        if is_asym and original_text is not None:
-            # Re-encrypt reusing the original DEK + recipients (only our key needed).
-            private_key = _resolve_private_key(args, search_dir=search_dir)
-            out = core.reencrypt_text_asymmetric(edited, private_key, original_text)
-        elif is_asym:
-            out = core.encrypt_text_asymmetric(edited, _collect_recipients(args))
-        else:
-            key_bytes = bytearray(_resolve_key_bytes(args, search_dir=search_dir))
+        editor_cmd = shlex.split(editor)
+        while True:
             try:
-                out = core.encrypt_text(edited, bytes(key_bytes))
-            finally:
-                crypto._zero(key_bytes)
+                result = subprocess.run(editor_cmd + [tmp_path])
+            except FileNotFoundError:
+                _err(f"Editor not found: {editor!r}. Set $EDITOR to a valid editor.")
+                return 1
+            if result.returncode != 0:
+                _err(f"Editor exited with status {result.returncode}; aborting (no changes saved).")
+                return 1
+
+            with open(tmp_path, "r", encoding="utf-8") as fh:
+                edited = fh.read()
+
+            if original_text is not None and edited == cleartext:
+                print(f"No changes; {args.input} left untouched.")
+                return 0
+
+            try:
+                if is_asym and original_text is not None:
+                    # Re-encrypt reusing the original DEK + recipients (only our key needed).
+                    private_key = _resolve_private_key(args, search_dir=search_dir)
+                    out = core.reencrypt_text_asymmetric(edited, private_key, original_text)
+                elif is_asym:
+                    out = core.encrypt_text_asymmetric(edited, _collect_recipients(args))
+                else:
+                    key_bytes = bytearray(_resolve_key_bytes(args, search_dir=search_dir))
+                    try:
+                        if original_text is not None:
+                            # Unchanged values keep their ciphertext (diff-friendly).
+                            out = core.reencrypt_text(edited, bytes(key_bytes), original_text)
+                        else:
+                            out = core.encrypt_text(edited, bytes(key_bytes))
+                    finally:
+                        crypto._zero(key_bytes)
+                break
+            except DotsealError as exc:
+                # Never throw the user's edits away over a typo: offer to
+                # re-open the editor; otherwise preserve the temp file.
+                _err(f"could not re-encrypt your edits: {exc}")
+                if sys.stdin.isatty() and _ask_reopen_editor():
+                    continue
+                keep_tmp = True
+                _err(
+                    f"your edits were kept at {tmp_path} (mode 0600). Fix the "
+                    f"problem, re-run `dotseal edit`, and delete that file."
+                )
+                return 1
+
         with open(args.input, "w", encoding="utf-8") as fh:
             fh.write(out)
         print(f"Saved encrypted changes to {args.input}")
         return 0
     finally:
-        _secure_delete(tmp_path)
+        if not keep_tmp:
+            _secure_delete(tmp_path)
 
 
 def cmd_add_recipient(args: argparse.Namespace) -> int:

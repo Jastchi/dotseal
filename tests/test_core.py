@@ -288,16 +288,16 @@ def test_encrypt_text_asymmetric_deduplicates_recipients():
     assert len(core.parse_recipients(parser.parse(enc))) == 1
 
 
-def test_encrypt_text_asymmetric_skips_already_encrypted_value():
+def test_encrypt_text_asymmetric_rejects_already_encrypted_value():
+    from dotseal.exceptions import EncryptionError
+
     _, pub = crypto.generate_recipient_keypair()
-    # Build a file that already contains a real ENC[...] token as its value.
+    # A file that already contains a real ENC[...] token (under some other
+    # key) must be refused: a fresh DEK could never decrypt it again.
     other_key = crypto.load_key_bytes(crypto.generate_master_key())
     preexisting = crypto.encrypt_value(other_key, "original", aad="FOO")
-    text = f"FOO={preexisting}\n"
-    result = core.encrypt_text_asymmetric(text, [pub])
-    # The preexisting ENC[...] value must be preserved unchanged.
-    entries = {r.key: r.value for r in parser.parse(result).records if r.kind == "entry"}
-    assert entries["FOO"] == preexisting
+    with pytest.raises(EncryptionError):
+        core.encrypt_text_asymmetric(f"FOO={preexisting}\n", [pub])
 
 
 # --- recover_data_key with no recipients -------------------------------------
@@ -374,3 +374,141 @@ def test_remove_recipient_not_found_raises():
     enc = core.encrypt_text_asymmetric("FOO=bar\n", [pub_a])
     with pytest.raises(RecipientNotFoundError):
         core.remove_recipient_from_text(enc, pub_b)
+
+
+# --- re-encryption guards (issue: bricked files) ------------------------------
+
+def test_encrypt_text_with_wrong_key_raises_instead_of_bricking():
+    from dotseal.exceptions import KeyFingerprintMismatchError as FpMismatch
+
+    k1 = crypto.load_key_bytes(crypto.generate_master_key())
+    k2 = crypto.load_key_bytes(crypto.generate_master_key())
+    enc = core.encrypt_text("FOO=bar\n", k1)
+    with pytest.raises(FpMismatch):
+        core.encrypt_text(enc, k2)
+
+
+def test_encrypt_text_rejects_enc_lookalike_without_metadata():
+    from dotseal.exceptions import EncryptionError
+
+    key = crypto.load_key_bytes(crypto.generate_master_key())
+    with pytest.raises(EncryptionError):
+        core.encrypt_text("SNEAKY=ENC[AES_GCM,data:aGVsbG8=]\n", key)
+
+
+def test_encrypt_text_rejects_asymmetric_file():
+    from dotseal.exceptions import EncryptionError
+
+    _, pub = crypto.generate_recipient_keypair()
+    enc = core.encrypt_text_asymmetric("FOO=bar\n", [pub])
+    key = crypto.load_key_bytes(crypto.generate_master_key())
+    with pytest.raises(EncryptionError):
+        core.encrypt_text(enc, key)
+
+
+def test_encrypt_text_partial_encryption_with_matching_key_is_supported():
+    key = crypto.load_key_bytes(crypto.generate_master_key())
+    enc = core.encrypt_text("FOO=bar\n", key)
+    # Simulate a user appending a new cleartext variable to the .env.enc.
+    with_new = enc.replace("# dotseal:", "NEW=cleartext\n# dotseal:")
+    enc2 = core.encrypt_text(with_new, key)
+    assert core.decrypt_to_dict(enc2, key) == {"FOO": "bar", "NEW": "cleartext"}
+
+
+# --- key resolution precedence -------------------------------------------------
+
+def test_explicit_key_file_beats_env_var(tmp_path, monkeypatch):
+    file_key = crypto.generate_master_key()
+    env_key = crypto.generate_master_key()
+    key_path = tmp_path / "explicit.key"
+    key_path.write_text(file_key + "\n")
+    monkeypatch.setenv(core.ENV_VAR_NAME, env_key)
+    assert core.resolve_master_key(key_file=str(key_path)) == file_key
+
+
+def test_explicit_missing_key_file_raises(tmp_path, monkeypatch):
+    monkeypatch.setenv(core.ENV_VAR_NAME, crypto.generate_master_key())
+    with pytest.raises(MasterKeyNotFoundError):
+        core.resolve_master_key(key_file=str(tmp_path / "nope.key"))
+
+
+def test_explicit_private_key_file_beats_env_var(tmp_path, monkeypatch):
+    file_priv, _ = crypto.generate_recipient_keypair()
+    env_priv, _ = crypto.generate_recipient_keypair()
+    key_path = tmp_path / "explicit.prv"
+    key_path.write_text(file_priv + "\n")
+    monkeypatch.setenv(core.PRIVATE_ENV_VAR_NAME, env_priv)
+    assert core.resolve_private_key(key_file=str(key_path)) == file_priv
+
+
+def test_explicit_missing_private_key_file_raises(tmp_path, monkeypatch):
+    monkeypatch.delenv(core.PRIVATE_ENV_VAR_NAME, raising=False)
+    with pytest.raises(PrivateKeyNotFoundError):
+        core.resolve_private_key(key_file=str(tmp_path / "nope.prv"))
+
+
+# --- reencrypt_text: unchanged ciphertexts are reused --------------------------
+
+def test_reencrypt_text_reuses_unchanged_ciphertexts():
+    key = crypto.load_key_bytes(crypto.generate_master_key())
+    original = core.encrypt_text("KEEP=same\nCHANGE=old\n", key)
+    tokens = {e.key: e.value for e in parser.parse(original).entries()}
+
+    result = core.reencrypt_text("KEEP=same\nCHANGE=new\n", key, original)
+    new_tokens = {e.key: e.value for e in parser.parse(result).entries()}
+
+    assert new_tokens["KEEP"] == tokens["KEEP"]  # token preserved verbatim
+    assert new_tokens["CHANGE"] != tokens["CHANGE"]
+    assert core.decrypt_to_dict(result, key) == {"KEEP": "same", "CHANGE": "new"}
+
+
+def test_reencrypt_text_wrong_key_raises():
+    k1 = crypto.load_key_bytes(crypto.generate_master_key())
+    k2 = crypto.load_key_bytes(crypto.generate_master_key())
+    original = core.encrypt_text("FOO=bar\n", k1)
+    with pytest.raises(KeyFingerprintMismatchError):
+        core.reencrypt_text("FOO=baz\n", k2, original)
+
+
+def test_reencrypt_text_asymmetric_reuses_unchanged_ciphertexts():
+    priv, pub = crypto.generate_recipient_keypair()
+    original = core.encrypt_text_asymmetric("KEEP=same\nCHANGE=old\n", [pub])
+    tokens = {e.key: e.value for e in parser.parse(original).entries()}
+
+    result = core.reencrypt_text_asymmetric("KEEP=same\nCHANGE=new\n", priv, original)
+    new_tokens = {e.key: e.value for e in parser.parse(result).entries()}
+
+    assert new_tokens["KEEP"] == tokens["KEEP"]
+    assert new_tokens["CHANGE"] != tokens["CHANGE"]
+    assert core.decrypt_to_dict_asymmetric(result, priv) == {
+        "KEEP": "same",
+        "CHANGE": "new",
+    }
+
+
+# --- write_secret_file hardening -----------------------------------------------
+
+def test_write_secret_file_replaces_loose_permissions(tmp_path):
+    target = tmp_path / "out.env"
+    target.write_text("old")
+    os.chmod(target, 0o644)
+    core.write_secret_file(str(target), "secret")
+    assert stat.S_IMODE(os.stat(target).st_mode) == 0o600
+    assert target.read_text() == "secret"
+
+
+def test_write_secret_file_replaces_symlink_instead_of_following(tmp_path):
+    victim = tmp_path / "victim.txt"
+    victim.write_text("untouched")
+    target = tmp_path / "out.env"
+    os.symlink(victim, target)
+    core.write_secret_file(str(target), "secret")
+    assert victim.read_text() == "untouched"  # symlink target not written through
+    assert not os.path.islink(target)
+    assert target.read_text() == "secret"
+
+
+def test_write_secret_file_leaves_no_temp_files(tmp_path):
+    core.write_secret_file(str(tmp_path / "out.env"), "secret")
+    leftovers = [p for p in os.listdir(tmp_path) if p.startswith(".dotseal-tmp-")]
+    assert leftovers == []

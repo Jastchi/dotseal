@@ -76,3 +76,39 @@ describe("keys", () => {
     expect(() => resolveMasterKey(tmpDir)).toThrow(MasterKeyNotFoundError);
   });
 });
+
+describe("keys explicit keyFile", () => {
+  let tmpDir: string;
+  const originalEnv = process.env.DOTSEAL_MASTER_KEY;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "dotseal-keyfile-"));
+    delete process.env.DOTSEAL_MASTER_KEY;
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+    if (originalEnv === undefined) {
+      delete process.env.DOTSEAL_MASTER_KEY;
+    } else {
+      process.env.DOTSEAL_MASTER_KEY = originalEnv;
+    }
+  });
+
+  it("throws when an explicitly configured key file is missing", () => {
+    process.env.DOTSEAL_MASTER_KEY = keyString; // must NOT be used as fallback
+
+    expect(() =>
+      resolveMasterKey(tmpDir, { keyFile: path.join(tmpDir, "missing.key") })
+    ).toThrow(MasterKeyNotFoundError);
+  });
+
+  it("explicit key file beats the environment variable", () => {
+    const fileKey = Buffer.alloc(32, 3).toString("base64");
+    const keyFile = path.join(tmpDir, "explicit.key");
+    fs.writeFileSync(keyFile, fileKey);
+    process.env.DOTSEAL_MASTER_KEY = keyString;
+
+    expect(resolveMasterKey(tmpDir, { keyFile })).toBe(fileKey);
+  });
+});

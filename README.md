@@ -36,7 +36,7 @@ Git-friendly encrypted `.env` files with cleartext keys and sealed values — an
 pip install dotseal
 ```
 
-Requires Python 3.8+. Using `uv`? `uv add dotseal`.
+Requires Python 3.9+. Using `uv`? `uv add dotseal`.
 
 **VS Code / Cursor extension:** download the latest `.vsix` from [GitHub Releases](https://github.com/Jastchi/dotseal/releases) and install via *Extensions: Install from VSIX*.
 
@@ -98,13 +98,15 @@ Generates a new cryptographically secure master key (symmetric mode), writes it 
 Generates an **X25519 recipient key pair** (asymmetric mode). Writes the private key to `.dotseal.prv` (mode `0600`, auto-gitignored) and prints the public key (`dsk-pub-...`) to share with whoever encrypts for you. Options: `--out <path>` to choose where the private key is written, `--force` to overwrite, and `--print` to print both halves to stdout instead of touching disk.
 
 ### `dotseal encrypt [input] [output]`
-Encrypts the values of a cleartext env file. Defaults: `.env` → `.env.enc`. Idempotent — values that are already encrypted are left untouched. Pass `-r/--recipient <dsk-pub-...>` (repeatable) or `--recipients-file <path>` to use asymmetric multi-recipient mode; otherwise it uses the symmetric master key.
+Encrypts the values of a cleartext env file. Defaults: `.env` → `.env.enc`. Idempotent — values already encrypted **with the same key** are left untouched (so you can append a cleartext variable to a `.env.enc` and re-encrypt). If the file's existing ciphertexts were made with a *different* key, or the file is asymmetric, `encrypt` refuses instead of producing a file no key can decrypt — decrypt with the old key first, then encrypt with the new one. Pass `-r/--recipient <dsk-pub-...>` (repeatable) or `--recipients-file <path>` to use asymmetric multi-recipient mode (cleartext input only); otherwise it uses the symmetric master key.
 
 ### `dotseal decrypt [input] [output]`
 Decrypts values back to cleartext. Defaults: `.env.enc` → `.env`. Auto-detects symmetric vs. asymmetric from the file. The output is written with owner-only (`0600`) permissions since it contains secrets.
 
 ### `dotseal edit [file]`
-SOPS-style editing. Decrypts `.env.enc` to a temporary file (mode `0600`), opens it in `$EDITOR` (falling back to `nano`), and re-encrypts on save. For asymmetric files the original data key and recipient list are preserved automatically. The temp file is securely overwritten and deleted afterward. If the file doesn't exist yet, you get a fresh template to start from.
+SOPS-style editing. Decrypts `.env.enc` to a temporary file (mode `0600`), opens it in `$EDITOR` (falling back to `nano`), and re-encrypts on save. Values you didn't change keep their original ciphertext, so the committed diff shows only the variables that actually changed; if you change nothing, the file is left untouched. For asymmetric files the original data key and recipient list are preserved automatically. The temp file is securely overwritten and deleted afterward. If the file doesn't exist yet, you get a fresh template to start from.
+
+If re-encryption fails (e.g. a syntax error in your edits), dotseal offers to re-open the editor; if you decline (or the session is non-interactive), your edits are preserved in the `0600` temp file and its path is printed, so nothing is ever lost to a typo. GUI editors must block until the file is closed — use e.g. `EDITOR="code --wait"`.
 
 ### `dotseal add-recipient <pubkey> [file]`
 Grants a new recipient access to an existing asymmetric file by wrapping its data key for the new public key. Requires a private key that is already a recipient (to unwrap the data key). Does not re-encrypt any values.
@@ -130,8 +132,9 @@ Removes a recipient's wrapped-key slot from an asymmetric file. Does not rotate 
 The master key is resolved in this order (first match wins):
 
 1. An explicit `--key` argument (CLI) or `master_key=` argument (loader).
-2. The `DOTSEAL_MASTER_KEY` environment variable.
-3. A local `.dotseal.key` file (searched for in the current directory and upward through parent directories).
+2. An explicit `--key-file` path (an error if the file does not exist — an explicitly requested key file is never silently overridden by the environment).
+3. The `DOTSEAL_MASTER_KEY` environment variable.
+4. A local `.dotseal.key` file (searched for in the current directory and upward through parent directories).
 
 The key is a base64-encoded 32-byte (AES-256) value. Generate one programmatically with:
 
@@ -182,8 +185,9 @@ Public keys (`dsk-pub-...`) are safe to commit/share; private keys (`dsk-prv-...
 The private key is resolved in this order (first match wins):
 
 1. An explicit `--private-key` argument (CLI) or `private_key=` argument (loader).
-2. The `DOTSEAL_PRIVATE_KEY` environment variable.
-3. A local `.dotseal.prv` file (searched for in the current directory and upward).
+2. An explicit `--private-key-file` path (an error if the file does not exist).
+3. The `DOTSEAL_PRIVATE_KEY` environment variable.
+4. A local `.dotseal.prv` file (searched for in the current directory and upward).
 
 `dotseal decrypt`, `dotseal edit`, and `load_env()` **auto-detect** whether a file is symmetric or asymmetric from its metadata — you just supply the matching key material.
 
@@ -360,9 +364,10 @@ env:
 
 - **AES-256-GCM** provides confidentiality *and* integrity. Tampered ciphertext or a wrong key is rejected rather than silently producing garbage.
 - **AAD binding** prevents an attacker who can edit the committed `.env.enc` from relocating a high-privilege secret onto a low-privilege variable name.
+- **Integrity is per value, not per file.** An attacker who can edit the committed `.env.enc` cannot forge or relocate values, but can still *delete* or *duplicate* whole entries, or replay an older ciphertext for the same variable name (from git history, or from another file encrypted with the same key). Review diffs of `.env.enc` like any other code change.
 - **Key fingerprint** is a domain-separated SHA-256 hash truncated to 8 bytes; it reveals nothing about the key itself.
 - **Memory hygiene is best-effort.** dotseal overwrites the mutable key buffers it controls, but Python's immutable `str`/`bytes` and garbage collector mean secrets can still linger in memory. Do not rely on this for protection against an attacker with live process access.
-- **The master key is the whole ballgame (symmetric mode).** Anyone with the key can decrypt everything. Rotate it by re-encrypting with `dotseal init --force` followed by `encrypt`, and store it only in trusted secret managers.
+- **The master key is the whole ballgame (symmetric mode).** Anyone with the key can decrypt everything. Rotate it with `dotseal decrypt` (old key) → `dotseal init --force` → `dotseal encrypt` (new key), and store it only in trusted secret managers. Running `encrypt` on a file whose ciphertexts were made with a different key is refused outright.
 - **Asymmetric mode** uses X25519 ECDH + HKDF-SHA256 + AES-256-GCM envelope encryption (the `age` construction). Multiple recipients can share one file without exchanging a secret; revocation via `rm-recipient` does not rotate the data key, so re-encrypt from cleartext for full revocation.
 - All recipients of an asymmetric file decrypt the **same** value for a given variable. Per-recipient *different* values for the same variable name are not supported.
 - dotseal does **not** integrate cloud KMS / Vault / PGP backends (a SOPS feature); it stays offline-first and pure Python.
@@ -376,7 +381,7 @@ uv venv && uv pip install -e ".[dev]"
 uv run pytest
 ```
 
-CI runs the full test suite on Python 3.8 through 3.14 (see `.github/workflows/test.yml`).
+CI runs the full test suite on Python 3.9 through 3.14 (see `.github/workflows/test.yml`).
 
 The test suite covers crypto round-trips, edge-case values (empty strings, `!!@#$%=`, unicode, multi-line, large), structural parsing, the runtime loader (asserting no side-effect files are written), and the full CLI lifecycle including `edit`.
 

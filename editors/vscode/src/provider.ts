@@ -1,7 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as vscode from "vscode";
-import { decryptText, encryptText } from "./dotseal/core";
+import { decryptText, encryptText, reencryptText } from "./dotseal/core";
 import { DotsealError } from "./dotseal/errors";
 import { KeyOptions, resolveKeyBytes } from "./dotseal/keys";
 
@@ -62,7 +62,16 @@ export class DotsealFsProvider implements vscode.FileSystemProvider {
     const realPath = fromDotsealUri(uri);
     try {
       const keyBytes = resolveKeyBytes(path.dirname(realPath), this.getKeyOptions());
-      const encrypted = encryptText(Buffer.from(content).toString("utf8"), keyBytes);
+      const cleartext = Buffer.from(content).toString("utf8");
+      // Reuse the existing ciphertext for unchanged values so saving only
+      // produces a diff for the variables that actually changed.
+      const original = fs.existsSync(realPath)
+        ? fs.readFileSync(realPath, "utf8")
+        : undefined;
+      const encrypted =
+        original !== undefined
+          ? reencryptText(cleartext, keyBytes, original)
+          : encryptText(cleartext, keyBytes);
       fs.writeFileSync(realPath, encrypted, "utf8");
       this.emitter.fire([{ type: vscode.FileChangeType.Changed, uri }]);
     } catch (error) {

@@ -36,6 +36,12 @@
       "enabled": false
     },
     {
+      "description": "Runtime dependencies of the library keep version RANGES (the global pep621 rangeStrategy=pin is for dev/optional deps only): dotseal is a library, and exact pins in [project.dependencies] force version conflicts onto every consumer. update-lockfile bumps uv.lock for in-range releases and only touches the range when an update falls outside it.",
+      "matchManagers": ["pep621"],
+      "matchDepTypes": ["project.dependencies"],
+      "rangeStrategy": "update-lockfile"
+    },
+    {
       "description": "Don't gate one-time pin/pinDigest operations on minimumReleaseAge. The value being pinned is what's currently in use, so the 7-day window adds no safety here. Without this, grouped pin PRs can get stuck pending forever because at least one dependency in the group typically has a release within the last 7 days.",
       "matchUpdateTypes": ["pin", "pinDigest"],
       "minimumReleaseAge": "0 days"
