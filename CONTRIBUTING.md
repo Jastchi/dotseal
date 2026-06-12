@@ -13,13 +13,22 @@ Thanks for taking the time to contribute. dotseal is a security-focused tool, so
 ```bash
 git clone https://github.com/Jastchi/dotseal.git
 cd dotseal
-uv venv && uv pip install -e ".[dev]"
+uv sync --extra dev
+prek install
 ```
+
+[prek](https://github.com/j178/prek) is a drop-in replacement for [pre-commit](https://pre-commit.com) — same `.pre-commit-config.yaml` format, but a single Rust binary with no Python runtime required. Hooks run faster and share toolchains instead of creating isolated virtualenvs per hook.
 
 ## Running tests and checks
 
 ```bash
+prek run --all-files   # lint + type checks (same hooks as git commit)
 uv run pytest          # full test suite
+```
+
+Individual commands if you prefer:
+
+```bash
 uv run ruff check .    # linting
 uv run ty check        # type checking
 ```

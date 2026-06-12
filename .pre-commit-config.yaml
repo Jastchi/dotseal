@@ -1,0 +1,38 @@
+# Managed by prek (https://github.com/j178/prek) — a drop-in, faster alternative to pre-commit.
+# Install: prek install
+# Run manually: prek run --all-files
+
+default_language_version:
+  python: python3
+
+repos:
+  - repo: builtin
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-toml
+      - id: check-merge-conflict
+      - id: detect-private-key
+      - id: check-added-large-files
+        args: [--maxkb=1024]
+
+  - repo: https://github.com/astral-sh/uv-pre-commit
+    rev: 0.11.20
+    hooks:
+      - id: uv-lock
+
+  - repo: local
+    hooks:
+      - id: ruff
+        name: ruff
+        entry: uv run ruff check
+        language: system
+        types: [python]
+
+      - id: ty
+        name: ty check
+        entry: uv run ty check .
+        language: system
+        types: [python]
+        pass_filenames: false
