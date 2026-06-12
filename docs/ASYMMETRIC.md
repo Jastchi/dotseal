@@ -66,4 +66,4 @@ enc = encrypt_text_asymmetric("FOO=bar\n", [pub])   # -> ".env.enc" text
 cleartext = decrypt_text_asymmetric(enc, priv)       # -> ".env" text
 ```
 
-See also [File Format](FILE_FORMAT.md) for the `v=2` on-disk layout.
+See also [File Format](FILE_FORMAT.md) for the `v=2` on-disk layout, [Usage and CLI](USAGE.md) for command details, and [Key Management](KEY_MANAGEMENT.md) for rotation and handling guidance.

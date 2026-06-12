@@ -64,3 +64,5 @@ env:
 ```
 
 For asymmetric files, use `DOTSEAL_PRIVATE_KEY` (or mount `.dotseal.prv`) instead of the symmetric master key.
+
+See also [Usage and CLI](USAGE.md), [Key Management](KEY_MANAGEMENT.md), and [Asymmetric Mode](ASYMMETRIC.md).
