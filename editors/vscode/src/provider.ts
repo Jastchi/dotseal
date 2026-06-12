@@ -1,7 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as vscode from "vscode";
-import { decryptText, encryptText } from "./dotseal/core";
+import { decryptText, encryptText, reencryptText } from "./dotseal/core";
 import { DotsealError } from "./dotseal/errors";
 import { KeyOptions, resolveKeyBytes } from "./dotseal/keys";
 
@@ -57,14 +57,46 @@ export class DotsealFsProvider implements vscode.FileSystemProvider {
   writeFile(
     uri: vscode.Uri,
     content: Uint8Array,
-    _options: { readonly create: boolean; readonly overwrite: boolean }
+    options: { readonly create: boolean; readonly overwrite: boolean }
   ): void {
     const realPath = fromDotsealUri(uri);
     try {
+      const exists = fs.existsSync(realPath);
+      if (!exists && !options.create) {
+        throw vscode.FileSystemError.FileNotFound(uri);
+      }
+      if (exists && options.create && !options.overwrite) {
+        throw vscode.FileSystemError.FileExists(uri);
+      }
       const keyBytes = resolveKeyBytes(path.dirname(realPath), this.getKeyOptions());
-      const encrypted = encryptText(Buffer.from(content).toString("utf8"), keyBytes);
-      fs.writeFileSync(realPath, encrypted, "utf8");
-      this.emitter.fire([{ type: vscode.FileChangeType.Changed, uri }]);
+      const cleartext = Buffer.from(content).toString("utf8");
+      // Reuse the existing ciphertext for unchanged values so saving only
+      // produces a diff for the variables that actually changed.
+      const original = exists ? fs.readFileSync(realPath, "utf8") : undefined;
+      const encrypted =
+        original !== undefined
+          ? reencryptText(cleartext, keyBytes, original)
+          : encryptText(cleartext, keyBytes);
+      // Write to a sibling temp file and rename so a crash mid-write can
+      // never leave a truncated/corrupt .env.enc behind.
+      const tmpPath = path.join(
+        path.dirname(realPath),
+        `.dotseal-tmp-${process.pid}-${Date.now()}`
+      );
+      try {
+        fs.writeFileSync(tmpPath, encrypted, "utf8");
+        fs.renameSync(tmpPath, realPath);
+      } catch (error) {
+        try {
+          fs.unlinkSync(tmpPath);
+        } catch {
+          // best effort cleanup
+        }
+        throw error;
+      }
+      this.emitter.fire([
+        { type: exists ? vscode.FileChangeType.Changed : vscode.FileChangeType.Created, uri }
+      ]);
     } catch (error) {
       throw fileSystemError(error);
     }

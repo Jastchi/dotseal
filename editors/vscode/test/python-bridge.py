@@ -15,6 +15,7 @@ def record_to_dict(record: parser.Record) -> dict[str, object]:
         "key": record.key,
         "value": record.value,
         "export": record.export,
+        "comment": record.comment,
     }
 
 
@@ -67,6 +68,15 @@ def main() -> None:
 
     if op == "decrypt_text":
         json.dump(core.decrypt_text(request["text"], key_bytes), sys.stdout)
+        return
+
+    if op == "reencrypt_text":
+        json.dump(
+            core.reencrypt_text(
+                request["cleartext"], key_bytes, request["original_text"]
+            ),
+            sys.stdout,
+        )
         return
 
     raise SystemExit(f"unknown op: {op}")

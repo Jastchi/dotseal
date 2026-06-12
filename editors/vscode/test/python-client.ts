@@ -74,3 +74,16 @@ export function pythonEncryptText(key: string, text: string): string {
 export function pythonDecryptText(key: string, text: string): string {
   return callPython<string>({ op: "decrypt_text", key, text });
 }
+
+export function pythonReencryptText(
+  key: string,
+  cleartext: string,
+  originalText: string
+): string {
+  return callPython<string>({
+    op: "reencrypt_text",
+    key,
+    cleartext,
+    original_text: originalText
+  });
+}

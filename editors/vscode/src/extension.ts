@@ -116,10 +116,26 @@ function isEncryptedEnvFile(uri: vscode.Uri): boolean {
   return uri.scheme === "file" && path.basename(uri.fsPath) === ".env.enc";
 }
 
+let warnedAboutWorkspaceMasterKey = false;
+
 function readKeyOptions(): KeyOptions {
   const config = vscode.workspace.getConfiguration("dotseal");
+  // Workspace settings are routinely committed to git, so a masterKey set
+  // there is one `git push` away from leaking. Only honor the user-level
+  // (global) value and warn when a workspace value is being ignored.
+  const inspected = config.inspect<string>("masterKey");
+  const workspaceValue =
+    inspected?.workspaceValue ?? inspected?.workspaceFolderValue;
+  if (workspaceValue?.trim() && !warnedAboutWorkspaceMasterKey) {
+    warnedAboutWorkspaceMasterKey = true;
+    void vscode.window.showWarningMessage(
+      "dotseal: ignoring dotseal.masterKey from workspace settings — workspace " +
+        "settings are typically committed to git. Set it in your user settings, " +
+        "or better, use DOTSEAL_MASTER_KEY / a .dotseal.key file."
+    );
+  }
   return {
-    masterKey: config.get<string>("masterKey", ""),
+    masterKey: inspected?.globalValue ?? "",
     keyFile: config.get<string>("keyFile", "")
   };
 }

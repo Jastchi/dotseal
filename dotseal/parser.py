@@ -16,13 +16,19 @@ Value handling follows common ``.env`` conventions:
   values are taken literally.
 * The first ``=`` separates key and value, so values may themselves contain
   ``=`` (e.g. ``PASSWORD=!!@#$%=``).
+* Inline comments are supported the way most dotenv tools do it: a ``#``
+  preceded by whitespace (or following a closing quote) starts a comment and
+  is *not* part of the value (``FOO=bar # prod key`` has the value ``bar``).
+  A ``#`` with no whitespace before it stays in the value
+  (``PASS=ab#cd`` is the value ``ab#cd``). Inline comments are preserved on
+  re-serialization.
 """
 
 from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import List
+from typing import List, Optional, Tuple
 
 from .exceptions import ParseError
 
@@ -46,6 +52,7 @@ class Record:
     key: str = ""
     value: str = ""  # logical (unquoted) value, or an ENC[...] token
     export: bool = False
+    comment: str = ""  # inline comment suffix incl. leading whitespace ('' if none)
 
 
 @dataclass
@@ -75,15 +82,56 @@ _DOUBLE_ESCAPE = {
 }
 
 
-def _unquote(raw: str) -> str:
-    """Turn a raw on-disk value into its logical string value."""
+# A '#' preceded by whitespace starts an inline comment in an unquoted value.
+_INLINE_COMMENT_RE = re.compile(r"\s+#")
+
+
+def _find_closing_quote(text: str, quote: str) -> Optional[int]:
+    """Index of the quote that closes ``text[0]``, or None if unterminated."""
+    i = 1
+    while i < len(text):
+        char = text[i]
+        if quote == '"' and char == "\\":
+            i += 2
+            continue
+        if char == quote:
+            return i
+        i += 1
+    return None
+
+
+def _split_value(raw: str) -> Tuple[str, str]:
+    """Split the raw text after ``=`` into (logical value, inline comment).
+
+    The comment (if any) is returned with its leading whitespace and ``#`` so
+    it can be re-serialized verbatim; it is ``""`` when absent.
+    """
+    lstripped = raw.lstrip()
+    if lstripped.startswith("#") and lstripped != raw:
+        # Whitespace then '#': the whole remainder is a comment, value empty.
+        return "", raw.rstrip()
     value = raw.strip()
-    if len(value) >= 2 and value[0] == value[-1] and value[0] in ("'", '"'):
-        inner = value[1:-1]
-        if value[0] == '"':
-            return _unescape_double(inner)
-        return inner  # single quotes: literal
-    return value
+    if value[:1] in ("'", '"'):
+        quote = value[0]
+        end = _find_closing_quote(value, quote)
+        if end is not None:
+            rest = value[end + 1:]
+            rest_l = rest.lstrip()
+            if rest_l == "" or rest_l.startswith("#"):
+                inner = value[1:end]
+                logical = _unescape_double(inner) if quote == '"' else inner
+                if rest_l == "":
+                    return logical, ""
+                # Guarantee a whitespace separator so the comment cannot fuse
+                # with the value on re-serialization.
+                comment = rest if rest[0] in (" ", "\t") else " " + rest
+                return logical, comment
+        # Unterminated quote or trailing junk after the closing quote:
+        # fall through and treat the whole thing as an unquoted literal.
+    match = _INLINE_COMMENT_RE.search(value)
+    if match:
+        return value[: match.start()], value[match.start():]
+    return value, ""
 
 
 def _unescape_double(inner: str) -> str:
@@ -137,13 +185,14 @@ def parse(text: str) -> ParsedEnv:
                 f"Line {lineno}: could not parse entry: {line!r}"
             )
         key = match.group("key")
-        raw_value = match.group("value")
+        value, comment = _split_value(match.group("value"))
         records.append(
             Record(
                 kind="entry",
                 key=key,
-                value=_unquote(raw_value),
+                value=value,
                 export=bool(match.group("export")),
+                comment=comment,
             )
         )
     return ParsedEnv(records=records)
@@ -164,7 +213,7 @@ def serialize(parsed: ParsedEnv) -> str:
             lines.append(r.raw)
         elif r.kind == "entry":
             prefix = "export " if r.export else ""
-            lines.append(f"{prefix}{r.key}={r.value}")
+            lines.append(f"{prefix}{r.key}={r.value}{r.comment}")
         else:  # pragma: no cover - defensive
             raise ParseError(f"Unknown record kind: {r.kind!r}")
     return "\n".join(lines) + "\n"

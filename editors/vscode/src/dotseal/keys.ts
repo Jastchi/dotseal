@@ -32,10 +32,16 @@ export function resolveMasterKey(searchDir: string, options: KeyOptions = {}): s
   }
 
   if (options.keyFile?.trim()) {
+    // An explicitly configured key file must never be silently skipped:
+    // falling through to the env var / discovery could decrypt or encrypt
+    // with a different key than the user asked for.
     const keyFile = resolveUserPath(options.keyFile.trim());
-    if (fs.existsSync(keyFile) && fs.statSync(keyFile).isFile()) {
-      return fs.readFileSync(keyFile, "utf8").trim();
+    if (!fs.existsSync(keyFile) || !fs.statSync(keyFile).isFile()) {
+      throw new MasterKeyNotFoundError(
+        `Key file not found: ${keyFile} (from the dotseal.keyFile setting).`
+      );
     }
+    return fs.readFileSync(keyFile, "utf8").trim();
   }
 
   const envValue = process.env[ENV_VAR_NAME];

@@ -119,6 +119,11 @@ def load_key_bytes(master_key: str) -> bytes:
             "Master key is not valid base64. It must be a base64-encoded "
             "32-byte key as produced by `dotseal init`."
         ) from exc
+    if base64.b64encode(raw).decode("ascii") != cleaned:
+        raise InvalidMasterKeyError(
+            "Master key is not valid base64. It must be a base64-encoded "
+            "32-byte key as produced by `dotseal init`."
+        )
     if len(raw) != KEY_SIZE:
         raise InvalidMasterKeyError(
             f"Master key must decode to {KEY_SIZE} bytes (got {len(raw)}). "
@@ -190,7 +195,9 @@ def decrypt_value(key_bytes: bytes, token: str, *, aad: str) -> str:
         plaintext = aesgcm.decrypt(nonce, ciphertext, aad.encode("utf-8"))
     except InvalidTag as exc:
         raise DecryptionError(
-            "Invalid Master Key or Corrupted Data."
+            "Could not decrypt value: wrong key, corrupted data, or the value "
+            "was moved to a different variable name (each ciphertext is bound "
+            "to its variable name)."
         ) from exc
     return plaintext.decode("utf-8")
 

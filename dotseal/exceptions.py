@@ -12,23 +12,27 @@ class DotsealError(Exception):
     """Base class for all dotseal errors."""
 
 
-class KeyError_(DotsealError):
+class KeyManagementError(DotsealError):
     """Base for key-related problems."""
 
 
-class MasterKeyNotFoundError(KeyError_):
+# Backwards-compatible alias for the old (builtin-shadowing) name.
+KeyError_ = KeyManagementError
+
+
+class MasterKeyNotFoundError(KeyManagementError):
     """Raised when no master key can be located via any supported method."""
 
 
-class PrivateKeyNotFoundError(KeyError_):
+class PrivateKeyNotFoundError(KeyManagementError):
     """Raised when no recipient private key can be located via any supported method."""
 
 
-class InvalidMasterKeyError(KeyError_):
+class InvalidMasterKeyError(KeyManagementError):
     """Raised when a provided master key is malformed (wrong length/encoding)."""
 
 
-class InvalidRecipientKeyError(KeyError_):
+class InvalidRecipientKeyError(KeyManagementError):
     """Raised when an X25519 recipient public/private key is malformed.
 
     Covers a missing ``dsk-pub-``/``dsk-prv-`` prefix, invalid base64, or the
@@ -36,7 +40,7 @@ class InvalidRecipientKeyError(KeyError_):
     """
 
 
-class RecipientNotFoundError(KeyError_):
+class RecipientNotFoundError(KeyManagementError):
     """Raised when no recipient slot in a file matches the supplied private key."""
 
 

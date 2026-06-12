@@ -62,15 +62,11 @@ Open the `editors/vscode` folder in VS Code, then press **F5**. This starts esbu
 
 ### Test fixture
 
-`test-project/` is a small [uv](https://docs.astral.sh/uv/) project for manual testing. It contains a `.env` with fake values and a pre-encrypted `.env.enc`. To use it:
+`test-project/` is a small [uv](https://docs.astral.sh/uv/) project for manual testing. It contains a committed `.env` with fake values; `.dotseal.key` and `.env.enc` are gitignored and generated locally.
 
-1. Generate a fresh key in the test project:
-   ```bash
-   cd test-project
-   uv run dotseal init
-   uv run dotseal encrypt
-   ```
-2. Open the Extension Development Host, then open `test-project/.env.enc`. The extension should redirect it to a decrypted virtual document.
+**F5** runs `npm run watch`, which creates those fixtures automatically when they are missing. You can also generate them manually with `test-project/setup.sh`.
+
+Open the Extension Development Host, then open `test-project/.env.enc`. The extension should redirect it to a decrypted virtual document.
 
 > `.dotseal.key` is gitignored. The `.env` is committed because the values are fake, but never commit a real `.env` with actual secrets.
 

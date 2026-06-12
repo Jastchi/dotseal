@@ -11,8 +11,10 @@ runtime loader actually need:
 
 from __future__ import annotations
 
+import contextlib
 import os
-from typing import Dict, List, Optional
+import tempfile
+from typing import Dict, List, Optional, Tuple
 
 from . import crypto, parser
 from .exceptions import (
@@ -75,20 +77,32 @@ def resolve_master_key(
 
     Resolution order (first match wins):
         1. ``master_key`` argument,
-        2. the ``DOTSEAL_MASTER_KEY`` environment variable,
-        3. an explicit ``key_file`` path, then a discovered local key file.
+        2. an explicit ``key_file`` path (an error if it does not exist),
+        3. the ``DOTSEAL_MASTER_KEY`` environment variable,
+        4. a discovered local key file.
+
+    An explicitly requested ``key_file`` always wins over the ambient
+    environment: a user who points at a specific key must never silently get a
+    different one.
 
     Raises:
-        MasterKeyNotFoundError: if no key can be found.
+        MasterKeyNotFoundError: if no key can be found, or if an explicit
+            ``key_file`` does not exist.
     """
     if master_key:
         return master_key.strip()
+
+    if key_file:
+        if not os.path.isfile(key_file):
+            raise MasterKeyNotFoundError(f"Key file not found: {key_file}")
+        with open(key_file, "r", encoding="utf-8") as fh:
+            return fh.read().strip()
 
     env_value = os.environ.get(ENV_VAR_NAME)
     if env_value and env_value.strip():
         return env_value.strip()
 
-    path = key_file or find_key_file(search_dir)
+    path = find_key_file(search_dir)
     if path and os.path.isfile(path):
         with open(path, "r", encoding="utf-8") as fh:
             return fh.read().strip()
@@ -123,20 +137,28 @@ def resolve_private_key(
 
     Resolution order (first match wins):
         1. ``private_key`` argument,
-        2. the ``DOTSEAL_PRIVATE_KEY`` environment variable,
-        3. an explicit ``key_file`` path, then a discovered local key file.
+        2. an explicit ``key_file`` path (an error if it does not exist),
+        3. the ``DOTSEAL_PRIVATE_KEY`` environment variable,
+        4. a discovered local key file.
 
     Raises:
-        PrivateKeyNotFoundError: if no private key can be found.
+        PrivateKeyNotFoundError: if no private key can be found, or if an
+            explicit ``key_file`` does not exist.
     """
     if private_key:
         return private_key.strip()
+
+    if key_file:
+        if not os.path.isfile(key_file):
+            raise PrivateKeyNotFoundError(f"Private key file not found: {key_file}")
+        with open(key_file, "r", encoding="utf-8") as fh:
+            return fh.read().strip()
 
     env_value = os.environ.get(PRIVATE_ENV_VAR_NAME)
     if env_value and env_value.strip():
         return env_value.strip()
 
-    path = key_file or find_private_key_file(search_dir)
+    path = find_private_key_file(search_dir)
     if path and os.path.isfile(path):
         with open(path, "r", encoding="utf-8") as fh:
             return fh.read().strip()
@@ -163,6 +185,28 @@ def build_recipient_line(fingerprint: str, ephem: str, enc: str) -> str:
     return f"{RECIPIENT_PREFIX}fp={fingerprint} ephem={ephem} enc={enc}"
 
 
+def _parse_tokens(body: str) -> Dict[str, str]:
+    """Parse ``k=v`` whitespace-separated tokens; tokens without ``=`` are skipped."""
+    fields: Dict[str, str] = {}
+    for token in body.split():
+        if "=" in token:
+            k, v = token.split("=", 1)
+            fields[k] = v
+    return fields
+
+
+def _is_footer_line(text: str) -> bool:
+    """True if a stripped comment line is a real dotseal footer.
+
+    Requires a ``v=`` token so that a user comment that merely *starts* with
+    ``# dotseal: `` can neither shadow the real footer nor be mistaken for it
+    (and silently deleted) -- see ``parse_metadata`` / ``_strip_managed_comments``.
+    """
+    if not text.startswith(_FOOTER_PREFIX):
+        return False
+    return "v" in _parse_tokens(text[len(METADATA_PREFIX):].strip())
+
+
 def parse_metadata(parsed: parser.ParsedEnv) -> Dict[str, str]:
     """Extract the ``# dotseal:`` footer tokens (version/algorithm), if present."""
     for record in parsed.records:
@@ -171,14 +215,8 @@ def parse_metadata(parsed: parser.ParsedEnv) -> Dict[str, str]:
         text = record.raw.strip()
         if text.startswith(RECIPIENT_PREFIX):
             continue  # recipient lines are parsed separately
-        if text.startswith(_FOOTER_PREFIX):
-            body = text[len(METADATA_PREFIX):].strip()
-            meta: Dict[str, str] = {}
-            for token in body.split():
-                if "=" in token:
-                    k, v = token.split("=", 1)
-                    meta[k] = v
-            return meta
+        if _is_footer_line(text):
+            return _parse_tokens(text[len(METADATA_PREFIX):].strip())
     return {}
 
 
@@ -191,12 +229,7 @@ def parse_recipients(parsed: parser.ParsedEnv) -> List[Dict[str, str]]:
         text = record.raw.strip()
         if not text.startswith(RECIPIENT_PREFIX):
             continue
-        body = text[len(RECIPIENT_PREFIX):].strip()
-        fields: Dict[str, str] = {}
-        for token in body.split():
-            if "=" in token:
-                k, v = token.split("=", 1)
-                fields[k] = v
+        fields = _parse_tokens(text[len(RECIPIENT_PREFIX):].strip())
         if {"fp", "ephem", "enc"} <= fields.keys():
             recipients.append(
                 {"fp": fields["fp"], "ephem": fields["ephem"], "enc": fields["enc"]}
@@ -204,21 +237,31 @@ def parse_recipients(parsed: parser.ParsedEnv) -> List[Dict[str, str]]:
     return recipients
 
 
+def _is_asymmetric(parsed: parser.ParsedEnv) -> bool:
+    """True if the parsed file carries asymmetric metadata or recipient slots.
+
+    Recipient slots count even when the footer is missing or damaged, so an
+    asymmetric file never silently falls back to the symmetric code path.
+    """
+    return _is_asym_metadata(parse_metadata(parsed)) or bool(parse_recipients(parsed))
+
+
 def file_mode(text: str) -> str:
     """Return ``"asymmetric"`` or ``"symmetric"`` for an encrypted file's text."""
-    meta = parse_metadata(parser.parse(text))
-    if meta.get("alg") == crypto.ALGORITHM_ASYM or meta.get("v") == METADATA_VERSION_ASYM:
-        return "asymmetric"
-    return "symmetric"
+    return "asymmetric" if _is_asymmetric(parser.parse(text)) else "symmetric"
 
 
 def _strip_managed_comments(parsed: parser.ParsedEnv) -> None:
-    """Remove dotseal's own banner / metadata comments (keep user ones)."""
+    """Remove dotseal's own banner / recipient / footer comments (keep user ones)."""
     kept = []
     for record in parsed.records:
         if record.kind == "comment":
             text = record.raw.strip()
-            if text == BANNER or text.startswith(METADATA_PREFIX):
+            if (
+                text == BANNER
+                or text.startswith(RECIPIENT_PREFIX)
+                or _is_footer_line(text)
+            ):
                 continue
         kept.append(record)
     parsed.records = kept
@@ -226,9 +269,54 @@ def _strip_managed_comments(parsed: parser.ParsedEnv) -> None:
 
 # --- Whole-file transforms --------------------------------------------------
 
+def _has_encrypted_values(parsed: parser.ParsedEnv) -> bool:
+    return any(
+        r.kind == "entry" and crypto.is_encrypted_value(r.value)
+        for r in parsed.records
+    )
+
+
+def _is_asym_metadata(meta: Dict[str, str]) -> bool:
+    return (
+        meta.get("alg") == crypto.ALGORITHM_ASYM
+        or meta.get("v") == METADATA_VERSION_ASYM
+    )
+
+
 def encrypt_text(text: str, key_bytes: bytes) -> str:
-    """Encrypt all cleartext values in ``text``; return ``.env.enc`` text."""
+    """Encrypt all cleartext values in ``text``; return ``.env.enc`` text.
+
+    Re-encrypting an already (or partially) encrypted file is supported only
+    when the file's recorded fingerprint matches ``key_bytes``: existing
+    ``ENC[...]`` values are then left untouched (idempotent) and only new
+    cleartext values are encrypted. Anything else would silently produce a
+    file whose footer and ciphertexts disagree -- undecryptable by any key.
+    """
     parsed = parser.parse(text)
+    if _is_asymmetric(parsed):
+        raise EncryptionError(
+            "This file is encrypted in asymmetric (multi-recipient) mode. "
+            "Re-encrypting it with a symmetric master key would make it "
+            "undecryptable. Decrypt it first, or keep using --recipient."
+        )
+    if _has_encrypted_values(parsed):
+        meta = parse_metadata(parsed)
+        recorded = meta.get("key_fp")
+        if recorded is None:
+            raise EncryptionError(
+                "The file contains ENC[...] values but no dotseal metadata, so "
+                "the key they were encrypted with cannot be verified. If these "
+                "are leftovers from an encrypted file, decrypt it first; if a "
+                "plaintext value genuinely looks like an ENC[...] token, it "
+                "cannot be stored verbatim."
+            )
+        if recorded != crypto.key_fingerprint(key_bytes):
+            raise KeyFingerprintMismatchError(
+                "The file's existing ENC[...] values were encrypted with a "
+                f"different master key (fingerprint {recorded}). Re-encrypting "
+                "with this key would make the file undecryptable by any key. "
+                "Decrypt with the old key first, then encrypt with the new one."
+            )
     _strip_managed_comments(parsed)
     for record in parsed.records:
         if record.kind != "entry":
@@ -236,6 +324,65 @@ def encrypt_text(text: str, key_bytes: bytes) -> str:
         if crypto.is_encrypted_value(record.value):
             continue  # idempotent: already encrypted
         record.value = crypto.encrypt_value(key_bytes, record.value, aad=record.key)
+
+    body = parser.serialize(parsed).rstrip("\n")
+    parts = [BANNER]
+    if body:
+        parts.append(body)
+    parts.append(build_metadata_line(key_bytes))
+    return "\n".join(parts) + "\n"
+
+
+def _original_tokens(
+    parsed: parser.ParsedEnv, decrypt_one
+) -> Dict[str, Tuple[str, str]]:
+    """Map each encrypted entry to ``name -> (token, plaintext)`` for reuse.
+
+    Entries that fail to decrypt are simply skipped (they will be re-encrypted
+    fresh). With duplicate names the last occurrence wins.
+    """
+    tokens: Dict[str, Tuple[str, str]] = {}
+    for record in parsed.records:
+        if record.kind != "entry" or not crypto.is_encrypted_value(record.value):
+            continue
+        with contextlib.suppress(DecryptionError):
+            plaintext = decrypt_one(record.value, record.key)
+            tokens[record.key] = (record.value, plaintext)
+    return tokens
+
+
+def reencrypt_text(cleartext: str, key_bytes: bytes, original_text: str) -> str:
+    """Re-encrypt edited cleartext, reusing unchanged ciphertexts.
+
+    This powers ``dotseal edit`` for symmetric files: values whose plaintext
+    did not change keep their original ``ENC[...]`` token, so the committed
+    diff shows only the variables that actually changed.
+    """
+    original = parser.parse(original_text)
+    if _is_asymmetric(original):
+        raise EncryptionError(
+            "The original file is encrypted in asymmetric (multi-recipient) "
+            "mode; re-encrypting it with a symmetric master key would drop "
+            "its recipients. Use reencrypt_text_asymmetric with a recipient "
+            "private key instead."
+        )
+    verify_key(original, key_bytes)
+    reusable = _original_tokens(
+        original, lambda token, name: crypto.decrypt_value(key_bytes, token, aad=name)
+    )
+
+    parsed = parser.parse(cleartext)
+    _strip_managed_comments(parsed)
+    for record in parsed.records:
+        if record.kind != "entry":
+            continue
+        if crypto.is_encrypted_value(record.value):
+            continue  # an ENC token the editor left in place: keep verbatim
+        previous = reusable.get(record.key)
+        if previous is not None and previous[1] == record.value:
+            record.value = previous[0]
+        else:
+            record.value = crypto.encrypt_value(key_bytes, record.value, aad=record.key)
 
     body = parser.serialize(parsed).rstrip("\n")
     parts = [BANNER]
@@ -256,9 +403,18 @@ def verify_key(parsed: parser.ParsedEnv, key_bytes: bytes) -> None:
         )
 
 
+def _reject_asymmetric_for_master_key(parsed: parser.ParsedEnv) -> None:
+    if _is_asymmetric(parsed):
+        raise DecryptionError(
+            "This file is encrypted in asymmetric (multi-recipient) mode; "
+            "decrypt it with a recipient private key, not a master key."
+        )
+
+
 def decrypt_text(text: str, key_bytes: bytes) -> str:
     """Decrypt all encrypted values in ``text``; return cleartext ``.env`` text."""
     parsed = parser.parse(text)
+    _reject_asymmetric_for_master_key(parsed)
     verify_key(parsed, key_bytes)
     for record in parsed.records:
         if record.kind != "entry":
@@ -275,6 +431,7 @@ def decrypt_text(text: str, key_bytes: bytes) -> str:
 def decrypt_to_dict(text: str, key_bytes: bytes) -> Dict[str, str]:
     """Decrypt ``text`` into a ``{name: value}`` mapping, in memory only."""
     parsed = parser.parse(text)
+    _reject_asymmetric_for_master_key(parsed)
     verify_key(parsed, key_bytes)
     result: Dict[str, str] = {}
     for record in parsed.records:
@@ -311,9 +468,24 @@ def _assemble_asym(
 
 
 def encrypt_text_asymmetric(text: str, recipient_public_keys: List[str]) -> str:
-    """Encrypt a cleartext file for one or more recipients (envelope scheme)."""
+    """Encrypt a cleartext file for one or more recipients (envelope scheme).
+
+    The input must be cleartext: every asymmetric encryption generates a fresh
+    data key, so any pre-existing ``ENC[...]`` value (encrypted under some
+    other key) would survive verbatim and become undecryptable. We refuse
+    loudly instead.
+    """
     if not recipient_public_keys:
         raise EncryptionError("At least one recipient public key is required.")
+
+    parsed = parser.parse(text)
+    if _has_encrypted_values(parsed):
+        raise EncryptionError(
+            "The file already contains ENC[...] values. Asymmetric encryption "
+            "always generates a fresh data key, so existing ciphertexts would "
+            "become undecryptable. Decrypt the file first (or use `dotseal "
+            "edit` / add-recipient to modify an existing asymmetric file)."
+        )
 
     # De-duplicate by fingerprint while preserving order.
     seen = set()
@@ -324,14 +496,11 @@ def encrypt_text_asymmetric(text: str, recipient_public_keys: List[str]) -> str:
             seen.add(fp)
             pubs.append(pub)
 
-    parsed = parser.parse(text)
     _strip_managed_comments(parsed)
     dek = crypto.generate_data_key()
     for record in parsed.records:
         if record.kind != "entry":
             continue
-        if crypto.is_encrypted_value(record.value):
-            continue  # idempotent: already encrypted
         record.value = crypto.encrypt_value(dek, record.value, aad=record.key)
 
     recipients = []
@@ -405,11 +574,16 @@ def reencrypt_text_asymmetric(
 
     This is what powers ``dotseal edit`` for asymmetric files: it keeps the same
     data key and recipient slots, so editing never needs the recipients' public
-    keys, only the editor's own private key.
+    keys, only the editor's own private key. Values whose plaintext did not
+    change keep their original ``ENC[...]`` token, so the committed diff shows
+    only the variables that actually changed.
     """
     original = parser.parse(original_text)
     dek = recover_data_key(original, private_key)
     recipients = parse_recipients(original)
+    reusable = _original_tokens(
+        original, lambda token, name: crypto.decrypt_value(dek, token, aad=name)
+    )
 
     parsed = parser.parse(cleartext)
     _strip_managed_comments(parsed)
@@ -418,7 +592,11 @@ def reencrypt_text_asymmetric(
             continue
         if crypto.is_encrypted_value(record.value):
             continue
-        record.value = crypto.encrypt_value(dek, record.value, aad=record.key)
+        previous = reusable.get(record.key)
+        if previous is not None and previous[1] == record.value:
+            record.value = previous[0]
+        else:
+            record.value = crypto.encrypt_value(dek, record.value, aad=record.key)
     return _assemble_asym(parsed, recipients)
 
 
@@ -469,16 +647,29 @@ def remove_recipient_from_text(text: str, identifier: str) -> str:
 # --- Filesystem helpers -----------------------------------------------------
 
 def write_secret_file(path: str, text: str, *, mode: int = 0o600) -> None:
-    """Write ``text`` to ``path`` with restrictive (owner-only) permissions."""
-    directory = os.path.dirname(os.path.abspath(path))
-    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, mode)
+    """Write ``text`` to ``path`` with restrictive (owner-only) permissions.
+
+    The content is written to a fresh ``O_EXCL`` temp file in the target
+    directory and atomically renamed into place, so:
+
+    * the secret is never readable through a pre-existing file's looser
+      permissions (the temp file is born with ``mode``),
+    * a crash mid-write cannot leave a truncated/corrupt target, and
+    * a symlink planted at ``path`` is replaced rather than followed.
+    """
+    abs_path = os.path.abspath(path)
+    directory = os.path.dirname(abs_path)
+    fd, tmp_path = tempfile.mkstemp(prefix=".dotseal-tmp-", dir=directory)
     try:
+        os.fchmod(fd, mode)
         with os.fdopen(fd, "w", encoding="utf-8") as fh:
             fh.write(text)
-    finally:
-        # Re-assert mode in case the file pre-existed with looser perms.
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.replace(tmp_path, abs_path)
+    except BaseException:
         try:
-            os.chmod(path, mode)
+            os.unlink(tmp_path)
         except OSError:
             pass
-    _ = directory  # reserved for future atomic-rename hardening
+        raise

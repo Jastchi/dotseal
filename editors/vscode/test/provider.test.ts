@@ -47,7 +47,7 @@ const { MockFileSystemError, makeDotsealUri, makeFileUri } = vi.hoisted(() => {
 vi.mock("vscode", () => ({
   FileSystemError: MockFileSystemError,
   FileType: { File: 1, Directory: 2 },
-  FileChangeType: { Changed: 1 },
+  FileChangeType: { Changed: 1, Created: 2 },
   EventEmitter: class<T> {
     private listener: ((value: T) => void) | undefined;
 
@@ -137,6 +137,43 @@ describe("DotsealFsProvider", () => {
 
     expect(Buffer.from(provider.readFile(uri)).toString("utf8")).toBe(updated);
     expect(fs.readFileSync(encPath, "utf8")).toContain("API_KEY=ENC[AES_GCM,data:");
+  });
+
+  it("rejects write when the file is missing and create is false", () => {
+    const provider = new DotsealFsProvider(() => ({ masterKey: keyString }));
+    const uri = makeDotsealUri(path.join(tmpDir, "missing.env.enc"));
+
+    expect(() =>
+      provider.writeFile(uri, Buffer.from("A=1\n", "utf8"), { create: false, overwrite: true })
+    ).toThrow(MockFileSystemError);
+  });
+
+  it("rejects overwrite when create and overwrite are both false", () => {
+    const encPath = path.join(tmpDir, ".env.enc");
+    fs.writeFileSync(encPath, encryptText("A=1\n", keyBytes), "utf8");
+    const provider = new DotsealFsProvider(() => ({ masterKey: keyString }));
+    const uri = makeDotsealUri(encPath);
+
+    expect(() =>
+      provider.writeFile(uri, Buffer.from("A=2\n", "utf8"), { create: true, overwrite: false })
+    ).toThrow(MockFileSystemError);
+  });
+
+  it("creates a new encrypted file when create is true", () => {
+    const encPath = path.join(tmpDir, "new.env.enc");
+    const provider = new DotsealFsProvider(() => ({ masterKey: keyString }));
+    const uri = makeDotsealUri(encPath);
+    const cleartext = "NEW=value\n";
+    const events: Array<{ type: number }> = [];
+    provider.onDidChangeFile((changes) => {
+      events.push(...changes);
+    });
+
+    provider.writeFile(uri, Buffer.from(cleartext, "utf8"), { create: true, overwrite: false });
+
+    expect(fs.existsSync(encPath)).toBe(true);
+    expect(Buffer.from(provider.readFile(uri)).toString("utf8")).toBe(cleartext);
+    expect(events.some((event) => event.type === 2)).toBe(true);
   });
 
   it("surfaces dotseal errors from readFile", () => {

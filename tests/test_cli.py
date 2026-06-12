@@ -184,6 +184,18 @@ def test_edit_new_file_symmetric(project, monkeypatch):
     assert (project / "brand-new.env.enc").is_file()
 
 
+def test_edit_new_file_unchanged_does_not_create(project, monkeypatch, capsys):
+    editor_script = project / "noop_editor.py"
+    editor_script.write_text("import sys\n")
+    monkeypatch.setenv("EDITOR", f"{sys.executable} {editor_script}")
+    assert main(["init"]) == 0
+    target = project / "brand-new.env.enc"
+    assert not target.exists()
+    assert main(["edit", "brand-new.env.enc"]) == 0
+    assert not target.exists()
+    assert "was not created" in capsys.readouterr().out
+
+
 def test_edit_new_file_asymmetric(project, monkeypatch):
     editor_script = project / "fake_editor.py"
     editor_script.write_text(
@@ -257,3 +269,158 @@ def test_edit_reencrypts_changes(project, monkeypatch):
     entries = {e.key: e.value for e in parser.parse((project / "out.env").read_text()).entries()}
     assert entries["DEBUG"] == "False"
     assert entries["NEW_KEY"] == "new_value"
+
+
+# --- edit: edits survive a re-encrypt failure ---------------------------------
+
+def test_edit_parse_error_preserves_edits(project, monkeypatch, capsys):
+    import tempfile
+
+    # Keep the edit temp file inside the test sandbox so we can find it.
+    monkeypatch.setattr(tempfile, "tempdir", str(project))
+
+    editor_script = project / "fake_editor.py"
+    editor_script.write_text(
+        "import sys\nopen(sys.argv[1], 'w').write('this is not = a valid !! line\\n')\n"
+    )
+    monkeypatch.setenv("EDITOR", f"{sys.executable} {editor_script}")
+
+    (project / ".env").write_text("FOO=bar\n")
+    assert main(["init"]) == 0
+    assert main(["encrypt"]) == 0
+    assert main(["edit"]) == 1
+
+    err = capsys.readouterr().err
+    assert "your edits were kept" in err
+    leftovers = [p for p in os.listdir(project) if p.startswith(".dotseal-edit-")]
+    assert len(leftovers) == 1
+    assert "not = a valid" in (project / leftovers[0]).read_text()
+    # The encrypted file itself must be untouched.
+    assert "FOO=ENC[" in (project / ".env.enc").read_text()
+
+
+def test_edit_no_changes_leaves_file_untouched(project, monkeypatch, capsys):
+    editor_script = project / "noop_editor.py"
+    editor_script.write_text("import sys\n")  # editor saves nothing
+    monkeypatch.setenv("EDITOR", f"{sys.executable} {editor_script}")
+
+    (project / ".env").write_text("FOO=bar\n")
+    assert main(["init"]) == 0
+    assert main(["encrypt"]) == 0
+    before = (project / ".env.enc").read_text()
+    assert main(["edit"]) == 0
+    assert (project / ".env.enc").read_text() == before
+    assert "No changes" in capsys.readouterr().out
+
+
+def test_edit_unchanged_values_keep_their_ciphertext(project, monkeypatch):
+    from dotseal import parser
+
+    editor_script = project / "fake_editor.py"
+    editor_script.write_text(
+        "import sys\n"
+        "p = sys.argv[1]\n"
+        "text = open(p).read().replace('CHANGE=old', 'CHANGE=new')\n"
+        "open(p, 'w').write(text)\n"
+    )
+    monkeypatch.setenv("EDITOR", f"{sys.executable} {editor_script}")
+
+    (project / ".env").write_text("KEEP=same\nCHANGE=old\n")
+    assert main(["init"]) == 0
+    assert main(["encrypt"]) == 0
+    before = {e.key: e.value for e in parser.parse((project / ".env.enc").read_text()).entries()}
+    assert main(["edit"]) == 0
+    after = {e.key: e.value for e in parser.parse((project / ".env.enc").read_text()).entries()}
+
+    assert after["KEEP"] == before["KEEP"]  # unchanged value: token reused
+    assert after["CHANGE"] != before["CHANGE"]
+
+
+# --- encrypt: refuses to brick a re-encrypted file ----------------------------
+
+def test_encrypt_after_key_rotation_fails_loudly(project, capsys):
+    (project / ".env").write_text("FOO=bar\n")
+    assert main(["init"]) == 0
+    assert main(["encrypt"]) == 0
+    assert main(["init", "--force"]) == 0
+    # Re-encrypting .env.enc (already encrypted under the old key) must fail.
+    assert main(["encrypt", ".env.enc", ".env.enc"]) == 1
+    assert "different master key" in capsys.readouterr().err
+
+
+# --- gitignore pattern awareness -----------------------------------------------
+
+def test_init_recognizes_covering_gitignore_pattern(project, capsys):
+    (project / ".gitignore").write_text("*.key\n")
+    assert main(["init"]) == 0
+    assert "already present" in capsys.readouterr().out
+    # No duplicate entry appended.
+    assert ".dotseal.key" not in (project / ".gitignore").read_text()
+
+
+def test_init_appends_when_gitignore_negation_reincludes_key(project, capsys):
+    gitignore = project / ".gitignore"
+    gitignore.write_text(".dotseal.key\n!.dotseal.key\n")
+    assert main(["init"]) == 0
+    out = capsys.readouterr().out
+    assert "already present" not in out
+    assert gitignore.read_text().count(".dotseal.key\n") >= 2
+
+
+def test_gitignore_covers_respects_negation_and_globs():
+    from dotseal.cli import _gitignore_covers
+
+    assert _gitignore_covers("*.key\n", ".dotseal.key")
+    assert not _gitignore_covers(".dotseal.key\n!.dotseal.key\n", ".dotseal.key")
+    assert _gitignore_covers("# comment\n*.key\n", ".dotseal.key")
+
+
+def test_ask_reopen_editor(project, monkeypatch):
+    from dotseal.cli import _ask_reopen_editor
+
+    monkeypatch.setattr("builtins.input", lambda _: "")
+    assert _ask_reopen_editor() is True
+
+    monkeypatch.setattr("builtins.input", lambda _: "n")
+    assert _ask_reopen_editor() is False
+
+    def raise_eof(_prompt):
+        raise EOFError
+
+    monkeypatch.setattr("builtins.input", raise_eof)
+    assert _ask_reopen_editor() is False
+
+
+def test_edit_reopens_editor_after_reencrypt_failure(project, monkeypatch, capsys):
+    import tempfile
+
+    monkeypatch.setattr(tempfile, "tempdir", str(project))
+
+    editor_script = project / "two_pass_editor.py"
+    editor_script.write_text(
+        "import sys, os\n"
+        "p = sys.argv[1]\n"
+        "marker = p + '.pass'\n"
+        "if not os.path.exists(marker):\n"
+        "    open(marker, 'w').close()\n"
+        "    open(p, 'w').write('this is not = a valid !! line\\n')\n"
+        "else:\n"
+        "    open(p, 'w').write('DEBUG=False\\n')\n"
+        "    os.remove(marker)\n"
+    )
+    monkeypatch.setenv("EDITOR", f"{sys.executable} {editor_script}")
+    monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
+    monkeypatch.setattr("builtins.input", lambda _: "")
+
+    (project / ".env").write_text("DEBUG=True\n")
+    assert main(["init"]) == 0
+    assert main(["encrypt"]) == 0
+    assert main(["edit"]) == 0
+
+    assert main(["decrypt", ".env.enc", "out.env"]) == 0
+    from dotseal import parser
+
+    entries = {e.key: e.value for e in parser.parse((project / "out.env").read_text()).entries()}
+    assert entries["DEBUG"] == "False"
+    leftovers = [p for p in os.listdir(project) if p.startswith(".dotseal-edit-")]
+    assert leftovers == []
