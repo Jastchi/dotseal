@@ -6,7 +6,17 @@
 set -eu
 cd "$(dirname "$0")"
 
-uv run --project ../../.. python - <<'PY'
+run_python() {
+  if command -v uv >/dev/null 2>&1; then
+    uv run --project ../../.. python "$@"
+  elif command -v python >/dev/null 2>&1; then
+    python "$@"
+  else
+    python3 "$@"
+  fi
+}
+
+run_python - <<'PY'
 from dotseal.cli import main
 
 rc = main(["init", "--force"])
