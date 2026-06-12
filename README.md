@@ -47,6 +47,13 @@ from dotseal import load_env
 load_env()  # reads .env.enc and injects decrypted values into os.environ
 ```
 
+## Not sure which mode to use?
+
+- Start with the default flow above if you work solo or in a small trusted setup.
+- Use collaborator mode when multiple people need access without sharing one secret key.
+- If you are unsure, start with the default and switch later when team-sharing needs grow.
+- Details: [Asymmetric mode](docs/ASYMMETRIC.md), [Key management](docs/KEY_MANAGEMENT.md).
+
 ## What gets committed?
 
 | File | Commit it? | Why |
