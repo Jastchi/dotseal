@@ -47,8 +47,8 @@ Asymmetric revocation note:
 - Store keys in a secret manager for CI/CD.
 - Treat key compromise as full secret compromise for corresponding encrypted history.
 
-See also:
+## See also
 
 - [Usage and CLI](USAGE.md)
-- [Asymmetric mode](ASYMMETRIC.md)
+- [Asymmetric Mode](ASYMMETRIC.md)
 - [Deployment](DEPLOYMENT.md)

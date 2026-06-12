@@ -29,4 +29,8 @@ DEBUG=ENC[AES_GCM,data:...]
 - Each `# dotseal:recipient` line is the DEK wrapped for one recipient: `fp` is that recipient's public-key fingerprint, `ephem` is the per-wrap ephemeral X25519 public key, and `enc` is `base64(nonce ‖ AES-GCM(wrapped DEK))`.
 - The footer's `alg=AES_GCM+X25519` / `v=2` is how dotseal auto-detects the mode on decrypt.
 
-See also [Usage and CLI](USAGE.md), [Asymmetric Mode](ASYMMETRIC.md), and [Key Management](KEY_MANAGEMENT.md).
+## See also
+
+- [Usage and CLI](USAGE.md)
+- [Asymmetric Mode](ASYMMETRIC.md)
+- [Key Management](KEY_MANAGEMENT.md)

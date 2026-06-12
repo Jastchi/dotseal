@@ -56,8 +56,8 @@ Key options:
 - Symmetric: `--key`, `--key-file`
 - Asymmetric: `--private-key`, `--private-key-file`
 
-See also:
+## See also
 
-- [Key management](KEY_MANAGEMENT.md)
-- [Asymmetric mode](ASYMMETRIC.md)
-- [File format](FILE_FORMAT.md)
+- [Key Management](KEY_MANAGEMENT.md)
+- [Asymmetric Mode](ASYMMETRIC.md)
+- [File Format](FILE_FORMAT.md)
