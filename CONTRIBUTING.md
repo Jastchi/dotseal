@@ -64,7 +64,7 @@ and always wrote the same 12-byte sequence.
 
 ## Cryptography changes
 
-Any change to the encryption, decryption, key derivation, or AAD binding logic requires a clear explanation in the PR of why the change is safe. These PRs will receive extra scrutiny.
+Any change to the encryption, decryption, key derivation, or AAD binding logic requires a clear explanation in the PR of why the change is safe. These PRs will receive extra scrutiny. See [docs/FILE_FORMAT.md](docs/FILE_FORMAT.md) for the on-disk layout.
 
 ## Code of Conduct
 
