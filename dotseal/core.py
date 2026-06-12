@@ -11,6 +11,7 @@ runtime loader actually need:
 
 from __future__ import annotations
 
+import contextlib
 import os
 import tempfile
 from typing import Dict, List, Optional, Tuple
@@ -344,11 +345,9 @@ def _original_tokens(
     for record in parsed.records:
         if record.kind != "entry" or not crypto.is_encrypted_value(record.value):
             continue
-        try:
+        with contextlib.suppress(DecryptionError):
             plaintext = decrypt_one(record.value, record.key)
-        except DecryptionError:
-            continue
-        tokens[record.key] = (record.value, plaintext)
+            tokens[record.key] = (record.value, plaintext)
     return tokens
 
 

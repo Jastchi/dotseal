@@ -365,3 +365,62 @@ def test_init_appends_when_gitignore_negation_reincludes_key(project, capsys):
     out = capsys.readouterr().out
     assert "already present" not in out
     assert gitignore.read_text().count(".dotseal.key\n") >= 2
+
+
+def test_gitignore_covers_respects_negation_and_globs():
+    from dotseal.cli import _gitignore_covers
+
+    assert _gitignore_covers("*.key\n", ".dotseal.key")
+    assert not _gitignore_covers(".dotseal.key\n!.dotseal.key\n", ".dotseal.key")
+    assert _gitignore_covers("# comment\n*.key\n", ".dotseal.key")
+
+
+def test_ask_reopen_editor(project, monkeypatch):
+    from dotseal.cli import _ask_reopen_editor
+
+    monkeypatch.setattr("builtins.input", lambda _: "")
+    assert _ask_reopen_editor() is True
+
+    monkeypatch.setattr("builtins.input", lambda _: "n")
+    assert _ask_reopen_editor() is False
+
+    def raise_eof(_prompt):
+        raise EOFError
+
+    monkeypatch.setattr("builtins.input", raise_eof)
+    assert _ask_reopen_editor() is False
+
+
+def test_edit_reopens_editor_after_reencrypt_failure(project, monkeypatch, capsys):
+    import tempfile
+
+    monkeypatch.setattr(tempfile, "tempdir", str(project))
+
+    editor_script = project / "two_pass_editor.py"
+    editor_script.write_text(
+        "import sys, os\n"
+        "p = sys.argv[1]\n"
+        "marker = p + '.pass'\n"
+        "if not os.path.exists(marker):\n"
+        "    open(marker, 'w').close()\n"
+        "    open(p, 'w').write('this is not = a valid !! line\\n')\n"
+        "else:\n"
+        "    open(p, 'w').write('DEBUG=False\\n')\n"
+        "    os.remove(marker)\n"
+    )
+    monkeypatch.setenv("EDITOR", f"{sys.executable} {editor_script}")
+    monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
+    monkeypatch.setattr("builtins.input", lambda _: "")
+
+    (project / ".env").write_text("DEBUG=True\n")
+    assert main(["init"]) == 0
+    assert main(["encrypt"]) == 0
+    assert main(["edit"]) == 0
+
+    assert main(["decrypt", ".env.enc", "out.env"]) == 0
+    from dotseal import parser
+
+    entries = {e.key: e.value for e in parser.parse((project / "out.env").read_text()).entries()}
+    assert entries["DEBUG"] == "False"
+    leftovers = [p for p in os.listdir(project) if p.startswith(".dotseal-edit-")]
+    assert leftovers == []

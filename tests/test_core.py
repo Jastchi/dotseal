@@ -549,3 +549,72 @@ def test_write_secret_file_leaves_no_temp_files(tmp_path):
     core.write_secret_file(str(tmp_path / "out.env"), "secret")
     leftovers = [p for p in os.listdir(tmp_path) if p.startswith(".dotseal-tmp-")]
     assert leftovers == []
+
+
+def test_write_secret_file_cleans_up_temp_on_failure(tmp_path, monkeypatch):
+    target = tmp_path / "out.env"
+
+    def fail_replace(_src, _dst):
+        raise OSError("replace failed")
+
+    monkeypatch.setattr(os, "replace", fail_replace)
+    with pytest.raises(OSError, match="replace failed"):
+        core.write_secret_file(str(target), "secret")
+    leftovers = [p for p in tmp_path.iterdir() if p.name.startswith(".dotseal-tmp-")]
+    assert leftovers == []
+
+
+def test_write_secret_file_survives_unlink_error_during_cleanup(tmp_path, monkeypatch):
+    target = tmp_path / "out.env"
+    real_unlink = os.unlink
+
+    def fail_unlink_on_temp(path):
+        if ".dotseal-tmp-" in path:
+            raise OSError("unlink failed")
+        return real_unlink(path)
+
+    monkeypatch.setattr(os, "replace", lambda *_: (_ for _ in ()).throw(OSError("replace failed")))
+    monkeypatch.setattr(os, "unlink", fail_unlink_on_temp)
+    with pytest.raises(OSError, match="replace failed"):
+        core.write_secret_file(str(target), "secret")
+
+
+def test_reencrypt_text_skips_undecryptable_original_tokens():
+    key = crypto.load_key_bytes(crypto.generate_master_key())
+    good = crypto.encrypt_value(key, "val", aad="GOOD")
+    bad = good[:-4] + "XXXX"
+    original = parser.serialize(parser.parse(f"GOOD={good}\nBAD={bad}\n"))
+
+    result = core.reencrypt_text("GOOD=val\nBAD=val\n", key, original)
+    assert core.decrypt_to_dict(result, key) == {"GOOD": "val", "BAD": "val"}
+
+
+def test_original_tokens_skips_decrypt_failures():
+    key = crypto.load_key_bytes(crypto.generate_master_key())
+    good = crypto.encrypt_value(key, "val", aad="GOOD")
+    bad = good[:-4] + "XXXX"
+    parsed = parser.parse(f"GOOD={good}\nBAD={bad}\n")
+    tokens = core._original_tokens(
+        parsed,
+        lambda token, name: crypto.decrypt_value(key, token, aad=name),
+    )
+    assert set(tokens) == {"GOOD"}
+
+
+def test_reencrypt_text_preserves_enc_token_left_in_cleartext():
+    key = crypto.load_key_bytes(crypto.generate_master_key())
+    original = core.encrypt_text("FOO=bar\n", key)
+    token = next(e.value for e in parser.parse(original).entries())
+
+    result = core.reencrypt_text(f"FOO={token}\n", key, original)
+    assert next(e.value for e in parser.parse(result).entries()) == token
+
+
+def test_reencrypt_text_with_comments_and_empty_body():
+    key = crypto.load_key_bytes(crypto.generate_master_key())
+    original = core.encrypt_text("FOO=bar\n", key)
+
+    result = core.reencrypt_text("\n\n", key, original)
+    assert result.startswith(core.BANNER)
+    assert core.build_metadata_line(key) in result
+    assert not parser.parse(result).entries()

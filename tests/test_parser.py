@@ -92,3 +92,27 @@ def test_quoted_value_with_inline_comment():
     entry = parsed.entries()[0]
     assert entry.value == "x"
     assert entry.comment == " # after quote"
+
+
+def test_empty_value_when_only_inline_comment():
+    parsed = parser.parse("FOO=  # comment only\n")
+    entry = parsed.entries()[0]
+    assert entry.value == ""
+    assert entry.comment == "  # comment only"
+
+
+def test_quoted_inline_comment_without_leading_space():
+    parsed = parser.parse('FOO="x"# note\n')
+    entry = parsed.entries()[0]
+    assert entry.value == "x"
+    assert entry.comment == " # note"
+
+
+def test_unterminated_quote_falls_back_to_literal():
+    parsed = parser.parse('FOO="unclosed\n')
+    assert parsed.entries()[0].value == '"unclosed'
+
+
+def test_quoted_value_with_trailing_junk_falls_back_to_literal():
+    parsed = parser.parse('FOO="bar"trailing\n')
+    assert parsed.entries()[0].value == '"bar"trailing'

@@ -33,6 +33,22 @@ def test_load_key_bytes_rejects_non_canonical_base64():
         crypto.load_key_bytes(canonical.rstrip("="))
 
 
+def test_load_key_bytes_rejects_reencoding_mismatch(monkeypatch):
+    """Decoded bytes must round-trip to the exact canonical base64 string."""
+    raw = base64.b64decode(crypto.generate_master_key())
+    cleaned = base64.b64encode(raw).decode("ascii")
+    real_b64encode = base64.b64encode
+
+    def fake_b64encode(data):
+        if data == raw:
+            return b"NOT-CANONICAL"
+        return real_b64encode(data)
+
+    monkeypatch.setattr(base64, "b64encode", fake_b64encode)
+    with pytest.raises(InvalidMasterKeyError):
+        crypto.load_key_bytes(cleaned)
+
+
 def test_fingerprint_is_stable_and_short():
     raw = base64.b64decode(crypto.generate_master_key())
     fp1 = crypto.key_fingerprint(raw)
