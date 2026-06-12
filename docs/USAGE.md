@@ -39,6 +39,13 @@ print(os.getenv("DATABASE_URL"))
 - `override=True`: decrypted values overwrite process variables.
 - Mode is auto-detected from metadata (`v=1` symmetric, `v=2` asymmetric).
 
+Asymmetric runtime example:
+
+```bash
+export DOTSEAL_PRIVATE_KEY="dsk-prv-..."
+python -c "from dotseal import load_env; load_env('.env.enc')"
+```
+
 ## CLI reference
 
 | Command | Purpose |
@@ -49,7 +56,7 @@ print(os.getenv("DATABASE_URL"))
 | `decrypt [in] [out]` | Decrypt values (`.env.enc` -> `.env` by default) |
 | `edit [file]` | Edit encrypted file safely in `$EDITOR` |
 | `add-recipient <pubkey> [file]` | Add recipient to asymmetric file |
-| `rm-recipient <fingerprint> [file]` | Remove recipient slot from asymmetric file |
+| `rm-recipient <pubkey-or-fingerprint> [file]` | Remove recipient slot from asymmetric file |
 
 Key options:
 

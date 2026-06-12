@@ -1,8 +1,13 @@
 # CI/CD Integration
 
-The pattern is always the same: provide the master key via the `DOTSEAL_MASTER_KEY` environment variable (from your platform's secret store), commit only `.env.enc`, and either decrypt to a file or load at runtime.
+Commit only `.env.enc`, inject key material from your platform's secret store, and either decrypt to a file or load at runtime.
 
-## GitHub Actions
+Use the environment variable that matches your file mode:
+
+- Symmetric (`v=1`): `DOTSEAL_MASTER_KEY`
+- Asymmetric (`v=2`): `DOTSEAL_PRIVATE_KEY`
+
+## GitHub Actions (symmetric example)
 
 Store the key as a repository/environment **secret** named `DOTSEAL_MASTER_KEY`.
 
@@ -26,7 +31,7 @@ jobs:
       - run: python -c "from dotseal import load_env; load_env(); import app"
 ```
 
-## Docker
+## Docker (symmetric example)
 
 Bake only the encrypted file into the image and pass the key at runtime:
 
@@ -50,7 +55,7 @@ from dotseal import load_env
 load_env()   # picks up DOTSEAL_MASTER_KEY from the container env
 ```
 
-## Kubernetes
+## Kubernetes (symmetric example)
 
 Store the master key in a `Secret` and expose it as `DOTSEAL_MASTER_KEY`:
 
@@ -63,7 +68,9 @@ env:
         key: master-key
 ```
 
-For asymmetric files, use `DOTSEAL_PRIVATE_KEY` (or mount `.dotseal.prv`) instead of the symmetric master key.
+## Asymmetric note (all platforms)
+
+For asymmetric files, provide `DOTSEAL_PRIVATE_KEY` (or mount `.dotseal.prv`) instead of the symmetric master key.
 
 ## See also
 

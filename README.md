@@ -49,9 +49,9 @@ load_env()  # reads .env.enc and injects decrypted values into os.environ
 
 ## Not sure which mode to use?
 
-- Start with the default flow above if you work solo or in a small trusted setup.
-- Use collaborator mode when multiple people need access without sharing one secret key.
-- If you are unsure, start with the default and switch later when team-sharing needs grow.
+- Solo or small trusted setup: start with symmetric mode (`dotseal init` + `dotseal encrypt`).
+- Team sharing without distributing one shared secret: use asymmetric mode.
+- If you are unsure, start symmetric and switch later when sharing/revocation needs grow.
 - Details: [Asymmetric mode](https://github.com/Jastchi/dotseal/blob/main/docs/ASYMMETRIC.md), [Key management](https://github.com/Jastchi/dotseal/blob/main/docs/KEY_MANAGEMENT.md).
 
 ## What gets committed?
