@@ -35,6 +35,8 @@ uv run ty check        # type checking
 
 All checks must pass before a PR is merged.
 
+CI runs the full test suite on Python 3.9 through 3.14 (see `.github/workflows/test.yml`). The test suite covers crypto round-trips, edge-case values (empty strings, `!!@#$%=`, unicode, multi-line, large), structural parsing, the runtime loader (asserting no side-effect files are written), and the full CLI lifecycle including `edit`.
+
 ## Making a change
 
 1. Fork the repo and create a branch from `main`:
