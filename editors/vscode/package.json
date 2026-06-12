@@ -1,7 +1,7 @@
 {
   "name": "dotseal-vscode",
   "displayName": "dotseal",
-  "description": "Edit dotseal .env.enc files as decrypted virtual documents.",
+  "description": "Edit dotseal encrypted env files (.env.enc, .env.production.enc, …) as decrypted virtual documents.",
   "version": "0.1.0",
   "publisher": "dotseal",
   "license": "MIT",
@@ -45,7 +45,7 @@
         "dotseal.autoOpen": {
           "type": "boolean",
           "default": true,
-          "description": "Automatically open .env.enc files through dotseal's decrypted virtual editor."
+          "description": "Automatically open dotenv-style encrypted env files (.env.enc, .env.production.enc, …) through dotseal's decrypted virtual editor."
         },
         "dotseal.keyFile": {
           "type": "string",

@@ -1,6 +1,6 @@
-import * as path from "node:path";
 import * as vscode from "vscode";
 import { KeyOptions } from "./dotseal/keys";
+import { isEncryptedEnvFile } from "./envFile";
 import {
   DOTSEAL_SCHEME,
   DotsealFsProvider,
@@ -38,7 +38,9 @@ async function openEncrypted(uri?: vscode.Uri): Promise<boolean> {
   }
 
   if (!isEncryptedEnvFile(target)) {
-    await vscode.window.showWarningMessage("Dotseal only opens files named .env.enc.");
+    await vscode.window.showWarningMessage(
+      "Dotseal only opens dotenv-style encrypted files (e.g. .env.enc, .env.production.enc)."
+    );
     return false;
   }
 
@@ -107,13 +109,9 @@ async function pickEncryptedFile(): Promise<vscode.Uri | undefined> {
       filters: {
         "dotseal encrypted env": ["enc"]
       },
-      title: "Open .env.enc with dotseal"
+      title: "Open encrypted env file with dotseal"
     })) ?? [];
   return selection;
-}
-
-function isEncryptedEnvFile(uri: vscode.Uri): boolean {
-  return uri.scheme === "file" && path.basename(uri.fsPath) === ".env.enc";
 }
 
 let warnedAboutWorkspaceMasterKey = false;
