@@ -20,8 +20,7 @@
   ],
   "activationEvents": [
     "onStartupFinished",
-    "onFileSystem:dotseal",
-    "onCommand:dotseal.openEncrypted"
+    "onFileSystem:dotseal"
   ],
   "main": "./dist/extension.js",
   "scripts": {

@@ -1,0 +1,79 @@
+# CI/CD Integration
+
+Commit only `.env.enc`, inject key material from your platform's secret store, and either decrypt to a file or load at runtime.
+
+Use the environment variable that matches your file mode:
+
+- Symmetric (`v=1`): `DOTSEAL_MASTER_KEY`
+- Asymmetric (`v=2`): `DOTSEAL_PRIVATE_KEY`
+
+## GitHub Actions (symmetric example)
+
+Store the key as a repository/environment **secret** named `DOTSEAL_MASTER_KEY`.
+
+```yaml
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      DOTSEAL_MASTER_KEY: ${{ secrets.DOTSEAL_MASTER_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install dotseal
+
+      # Option A: decrypt to a real .env for tools that expect a file
+      - run: dotseal decrypt .env.enc .env
+
+      # Option B: load at runtime inside your app (no cleartext file)
+      - run: python -c "from dotseal import load_env; load_env(); import app"
+```
+
+## Docker (symmetric example)
+
+Bake only the encrypted file into the image and pass the key at runtime:
+
+```dockerfile
+FROM python:3.12-slim
+WORKDIR /app
+RUN pip install dotseal
+COPY .env.enc .
+COPY . .
+# App calls load_env() on startup.
+CMD ["python", "main.py"]
+```
+
+```bash
+docker run -e DOTSEAL_MASTER_KEY="$(cat .dotseal.key)" my-image
+```
+
+```python
+# main.py
+from dotseal import load_env
+load_env()   # picks up DOTSEAL_MASTER_KEY from the container env
+```
+
+## Kubernetes (symmetric example)
+
+Store the master key in a `Secret` and expose it as `DOTSEAL_MASTER_KEY`:
+
+```yaml
+env:
+  - name: DOTSEAL_MASTER_KEY
+    valueFrom:
+      secretKeyRef:
+        name: dotseal
+        key: master-key
+```
+
+## Asymmetric note (all platforms)
+
+For asymmetric files, provide `DOTSEAL_PRIVATE_KEY` (or mount `.dotseal.prv`) instead of the symmetric master key.
+
+## See also
+
+- [Usage and CLI](USAGE.md)
+- [Key Management](KEY_MANAGEMENT.md)
+- [Asymmetric Mode](ASYMMETRIC.md)

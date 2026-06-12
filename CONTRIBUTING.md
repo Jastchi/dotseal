@@ -13,18 +13,29 @@ Thanks for taking the time to contribute. dotseal is a security-focused tool, so
 ```bash
 git clone https://github.com/Jastchi/dotseal.git
 cd dotseal
-uv venv && uv pip install -e ".[dev]"
+uv sync --extra dev
+prek install
 ```
+
+[prek](https://github.com/j178/prek) is a drop-in replacement for [pre-commit](https://pre-commit.com) — same `.pre-commit-config.yaml` format, but a single Rust binary with no Python runtime required. Hooks run faster and share toolchains instead of creating isolated virtualenvs per hook.
 
 ## Running tests and checks
 
 ```bash
+prek run --all-files   # lint + type checks (same hooks as git commit)
 uv run pytest          # full test suite
+```
+
+Individual commands if you prefer:
+
+```bash
 uv run ruff check .    # linting
 uv run ty check        # type checking
 ```
 
 All checks must pass before a PR is merged.
+
+CI runs the full test suite on Python 3.9 through 3.14 (see `.github/workflows/test.yml`). The test suite covers crypto round-trips, edge-case values (empty strings, `!!@#$%=`, unicode, multi-line, large), structural parsing, the runtime loader (asserting no side-effect files are written), and the full CLI lifecycle including `edit`.
 
 ## Making a change
 
@@ -53,7 +64,7 @@ and always wrote the same 12-byte sequence.
 
 ## Cryptography changes
 
-Any change to the encryption, decryption, key derivation, or AAD binding logic requires a clear explanation in the PR of why the change is safe. These PRs will receive extra scrutiny.
+Any change to the encryption, decryption, key derivation, or AAD binding logic requires a clear explanation in the PR of why the change is safe. These PRs will receive extra scrutiny. See [docs/FILE_FORMAT.md](docs/FILE_FORMAT.md) for the on-disk layout.
 
 ## Code of Conduct
 
