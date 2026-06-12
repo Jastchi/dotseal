@@ -33,16 +33,16 @@ export function loadKeyBytes(masterKey: string): Buffer {
     throw new InvalidMasterKeyError("Master key is empty.");
   }
 
-  let raw: Buffer;
-  try {
-    raw = Buffer.from(cleaned, "base64");
-  } catch (error) {
+  // Buffer.from silently skips invalid characters, so round-trip the decoded
+  // bytes to detect garbage input instead of misreporting it as a bad length.
+  const raw = Buffer.from(cleaned, "base64");
+  if (raw.toString("base64") !== cleaned) {
     throw new InvalidMasterKeyError(
       "Master key is not valid base64. It must be a base64-encoded 32-byte key as produced by `dotseal init`."
     );
   }
 
-  if (raw.length !== KEY_SIZE || raw.toString("base64") !== cleaned) {
+  if (raw.length !== KEY_SIZE) {
     throw new InvalidMasterKeyError(
       `Master key must decode to ${KEY_SIZE} bytes (got ${raw.length}). Did you copy the whole key?`
     );
@@ -123,6 +123,10 @@ export function decryptValue(
       decipher.final()
     ]).toString("utf8");
   } catch (error) {
-    throw new DecryptionError("Invalid Master Key or Corrupted Data.");
+    throw new DecryptionError(
+      "Could not decrypt value: wrong key, corrupted data, or the value was " +
+        "moved to a different variable name (each ciphertext is bound to its " +
+        "variable name)."
+    );
   }
 }

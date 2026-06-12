@@ -31,6 +31,29 @@ export function buildMetadataLine(keyBytes: Buffer): string {
   return `${METADATA_PREFIX} v=${METADATA_VERSION} alg=${ALGORITHM} key_fp=${keyFingerprint(keyBytes)}`;
 }
 
+function parseTokens(body: string): Map<string, string> {
+  const fields = new Map<string, string>();
+  for (const token of body.split(/\s+/)) {
+    const index = token.indexOf("=");
+    if (index !== -1) {
+      fields.set(token.slice(0, index), token.slice(index + 1));
+    }
+  }
+  return fields;
+}
+
+/**
+ * True if a stripped comment line is a real dotseal footer. Requires a `v=`
+ * token so a user comment that merely starts with `# dotseal: ` can neither
+ * shadow the real footer nor be mistaken for it (and silently deleted).
+ */
+function isFooterLine(text: string): boolean {
+  if (!text.startsWith(FOOTER_PREFIX)) {
+    return false;
+  }
+  return parseTokens(text.slice(METADATA_PREFIX.length).trim()).has("v");
+}
+
 export function parseMetadata(parsed: ParsedEnv): Map<string, string> {
   for (const record of parsed.records) {
     if (record.kind !== "comment") {
@@ -40,16 +63,8 @@ export function parseMetadata(parsed: ParsedEnv): Map<string, string> {
     if (text.startsWith(RECIPIENT_PREFIX)) {
       continue; // recipient slots are not the version/algorithm footer
     }
-    if (text.startsWith(FOOTER_PREFIX)) {
-      const body = text.slice(METADATA_PREFIX.length).trim();
-      const meta = new Map<string, string>();
-      for (const token of body.split(/\s+/)) {
-        const index = token.indexOf("=");
-        if (index !== -1) {
-          meta.set(token.slice(0, index), token.slice(index + 1));
-        }
-      }
-      return meta;
+    if (isFooterLine(text)) {
+      return parseTokens(text.slice(METADATA_PREFIX.length).trim());
     }
   }
   return new Map();
@@ -88,14 +103,16 @@ function stripManagedComments(parsed: ParsedEnv): void {
       return true;
     }
     const text = record.raw.trim();
-    return text !== BANNER && !text.startsWith(METADATA_PREFIX);
+    return (
+      text !== BANNER && !text.startsWith(RECIPIENT_PREFIX) && !isFooterLine(text)
+    );
   });
 }
 
 export function encryptText(text: string, keyBytes: Buffer): string {
   const parsed = parse(text);
+  assertNotAsymmetric(parsed);
   if (hasEncryptedValues(parsed)) {
-    assertNotAsymmetric(parsed);
     const recorded = parseMetadata(parsed).get("key_fp");
     if (recorded === undefined) {
       throw new EncryptionError(

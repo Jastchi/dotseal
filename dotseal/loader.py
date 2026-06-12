@@ -66,11 +66,7 @@ def load_env(
         values = core.decrypt_to_dict_asymmetric(text, priv)
     else:
         key_str = core.resolve_master_key(master_key, search_dir=search_dir)
-        key_bytes = bytearray(crypto.load_key_bytes(key_str))
-        try:
-            values = core.decrypt_to_dict(text, bytes(key_bytes))
-        finally:
-            crypto._zero(key_bytes)
+        values = core.decrypt_to_dict(text, crypto.load_key_bytes(key_str))
 
     set_any = False
     for name, value in values.items():

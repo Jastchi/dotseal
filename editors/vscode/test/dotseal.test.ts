@@ -22,7 +22,7 @@ describe("dotseal crypto", () => {
     expect(token).toMatch(/^ENC\[AES_GCM,data:.+\]$/);
     expect(decryptValue(keyBytes, token, "API_KEY")).toBe("super-secret");
     expect(() => decryptValue(keyBytes, token, "OTHER_KEY")).toThrow(
-      "Invalid Master Key or Corrupted Data."
+      /wrong key, corrupted data, or the value was moved/
     );
   });
 
@@ -43,14 +43,29 @@ describe("dotseal parser", () => {
     const parsed = parse("# hello\nexport API_KEY = \"line\\nvalue\"\nEMPTY=\n\n");
 
     expect(parsed.records).toEqual([
-      { kind: "comment", raw: "# hello", key: "", value: "", export: false },
-      { kind: "entry", raw: "", key: "API_KEY", value: "line\nvalue", export: true },
-      { kind: "entry", raw: "", key: "EMPTY", value: "", export: false },
-      { kind: "blank", raw: "", key: "", value: "", export: false }
+      { kind: "comment", raw: "# hello", key: "", value: "", export: false, comment: "" },
+      {
+        kind: "entry",
+        raw: "",
+        key: "API_KEY",
+        value: "line\nvalue",
+        export: true,
+        comment: ""
+      },
+      { kind: "entry", raw: "", key: "EMPTY", value: "", export: false, comment: "" },
+      { kind: "blank", raw: "", key: "", value: "", export: false, comment: "" }
     ]);
     expect(serialize(parsed)).toBe("# hello\nexport API_KEY=line\nvalue\nEMPTY=\n\n");
     expect(formatValue(" leading # value")).toBe("\" leading # value\"");
     expect(formatValue("simple")).toBe("simple");
+  });
+
+  it("strips whitespace-prefixed inline comments from unquoted values", () => {
+    const parsed = parse("FOO=bar # production key\nPASS=ab#cd\n");
+
+    expect(parsed.records[0]).toMatchObject({ key: "FOO", value: "bar", comment: " # production key" });
+    expect(parsed.records[1]).toMatchObject({ key: "PASS", value: "ab#cd", comment: "" });
+    expect(serialize(parsed)).toBe("FOO=bar # production key\nPASS=ab#cd\n");
   });
 });
 
@@ -121,6 +136,15 @@ describe("dotseal core re-encryption guards", () => {
     expect(meta.get("v")).toBe("2");
     expect(meta.get("fp")).toBeUndefined();
   });
+
+  it("parseMetadata ignores user comments that start with # dotseal:", () => {
+    const encrypted = encryptText("FOO=bar\n", keyBytes);
+    const tampered = "# dotseal: managed file, do not touch\n" + encrypted;
+    const meta = parseMetadata(parse(tampered));
+
+    expect(meta.get("v")).toBe("1");
+    expect(meta.get("key_fp")).toBe("5ec6bb135ca102fd");
+  });
 });
 
 describe("dotseal core reencryptText", () => {
@@ -145,5 +169,14 @@ describe("dotseal core reencryptText", () => {
     const original = encryptText("FOO=bar\n", keyBytes);
 
     expect(() => reencryptText("FOO=baz\n", otherKey, original)).toThrow(/does not match/);
+  });
+
+  it("refuses asymmetric originals", () => {
+    const asym =
+      "FOO=ENC[AES_GCM,data:aGVsbG8=]\n" +
+      "# dotseal:recipient fp=abc ephem=def enc=ghi\n" +
+      "# dotseal: v=2 alg=AES_GCM+X25519\n";
+
+    expect(() => reencryptText("FOO=baz\n", keyBytes, asym)).toThrow(/asymmetric/);
   });
 });

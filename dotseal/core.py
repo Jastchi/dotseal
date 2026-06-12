@@ -184,6 +184,28 @@ def build_recipient_line(fingerprint: str, ephem: str, enc: str) -> str:
     return f"{RECIPIENT_PREFIX}fp={fingerprint} ephem={ephem} enc={enc}"
 
 
+def _parse_tokens(body: str) -> Dict[str, str]:
+    """Parse ``k=v`` whitespace-separated tokens; tokens without ``=`` are skipped."""
+    fields: Dict[str, str] = {}
+    for token in body.split():
+        if "=" in token:
+            k, v = token.split("=", 1)
+            fields[k] = v
+    return fields
+
+
+def _is_footer_line(text: str) -> bool:
+    """True if a stripped comment line is a real dotseal footer.
+
+    Requires a ``v=`` token so that a user comment that merely *starts* with
+    ``# dotseal: `` can neither shadow the real footer nor be mistaken for it
+    (and silently deleted) -- see ``parse_metadata`` / ``_strip_managed_comments``.
+    """
+    if not text.startswith(_FOOTER_PREFIX):
+        return False
+    return "v" in _parse_tokens(text[len(METADATA_PREFIX):].strip())
+
+
 def parse_metadata(parsed: parser.ParsedEnv) -> Dict[str, str]:
     """Extract the ``# dotseal:`` footer tokens (version/algorithm), if present."""
     for record in parsed.records:
@@ -192,14 +214,8 @@ def parse_metadata(parsed: parser.ParsedEnv) -> Dict[str, str]:
         text = record.raw.strip()
         if text.startswith(RECIPIENT_PREFIX):
             continue  # recipient lines are parsed separately
-        if text.startswith(_FOOTER_PREFIX):
-            body = text[len(METADATA_PREFIX):].strip()
-            meta: Dict[str, str] = {}
-            for token in body.split():
-                if "=" in token:
-                    k, v = token.split("=", 1)
-                    meta[k] = v
-            return meta
+        if _is_footer_line(text):
+            return _parse_tokens(text[len(METADATA_PREFIX):].strip())
     return {}
 
 
@@ -212,12 +228,7 @@ def parse_recipients(parsed: parser.ParsedEnv) -> List[Dict[str, str]]:
         text = record.raw.strip()
         if not text.startswith(RECIPIENT_PREFIX):
             continue
-        body = text[len(RECIPIENT_PREFIX):].strip()
-        fields: Dict[str, str] = {}
-        for token in body.split():
-            if "=" in token:
-                k, v = token.split("=", 1)
-                fields[k] = v
+        fields = _parse_tokens(text[len(RECIPIENT_PREFIX):].strip())
         if {"fp", "ephem", "enc"} <= fields.keys():
             recipients.append(
                 {"fp": fields["fp"], "ephem": fields["ephem"], "enc": fields["enc"]}
@@ -225,21 +236,31 @@ def parse_recipients(parsed: parser.ParsedEnv) -> List[Dict[str, str]]:
     return recipients
 
 
+def _is_asymmetric(parsed: parser.ParsedEnv) -> bool:
+    """True if the parsed file carries asymmetric metadata or recipient slots.
+
+    Recipient slots count even when the footer is missing or damaged, so an
+    asymmetric file never silently falls back to the symmetric code path.
+    """
+    return _is_asym_metadata(parse_metadata(parsed)) or bool(parse_recipients(parsed))
+
+
 def file_mode(text: str) -> str:
     """Return ``"asymmetric"`` or ``"symmetric"`` for an encrypted file's text."""
-    meta = parse_metadata(parser.parse(text))
-    if meta.get("alg") == crypto.ALGORITHM_ASYM or meta.get("v") == METADATA_VERSION_ASYM:
-        return "asymmetric"
-    return "symmetric"
+    return "asymmetric" if _is_asymmetric(parser.parse(text)) else "symmetric"
 
 
 def _strip_managed_comments(parsed: parser.ParsedEnv) -> None:
-    """Remove dotseal's own banner / metadata comments (keep user ones)."""
+    """Remove dotseal's own banner / recipient / footer comments (keep user ones)."""
     kept = []
     for record in parsed.records:
         if record.kind == "comment":
             text = record.raw.strip()
-            if text == BANNER or text.startswith(METADATA_PREFIX):
+            if (
+                text == BANNER
+                or text.startswith(RECIPIENT_PREFIX)
+                or _is_footer_line(text)
+            ):
                 continue
         kept.append(record)
     parsed.records = kept
@@ -271,14 +292,14 @@ def encrypt_text(text: str, key_bytes: bytes) -> str:
     file whose footer and ciphertexts disagree -- undecryptable by any key.
     """
     parsed = parser.parse(text)
+    if _is_asymmetric(parsed):
+        raise EncryptionError(
+            "This file is encrypted in asymmetric (multi-recipient) mode. "
+            "Re-encrypting it with a symmetric master key would make it "
+            "undecryptable. Decrypt it first, or keep using --recipient."
+        )
     if _has_encrypted_values(parsed):
         meta = parse_metadata(parsed)
-        if _is_asym_metadata(meta):
-            raise EncryptionError(
-                "This file is encrypted in asymmetric (multi-recipient) mode. "
-                "Re-encrypting it with a symmetric master key would make it "
-                "undecryptable. Decrypt it first, or keep using --recipient."
-            )
         recorded = meta.get("key_fp")
         if recorded is None:
             raise EncryptionError(
@@ -339,6 +360,13 @@ def reencrypt_text(cleartext: str, key_bytes: bytes, original_text: str) -> str:
     diff shows only the variables that actually changed.
     """
     original = parser.parse(original_text)
+    if _is_asymmetric(original):
+        raise EncryptionError(
+            "The original file is encrypted in asymmetric (multi-recipient) "
+            "mode; re-encrypting it with a symmetric master key would drop "
+            "its recipients. Use reencrypt_text_asymmetric with a recipient "
+            "private key instead."
+        )
     verify_key(original, key_bytes)
     reusable = _original_tokens(
         original, lambda token, name: crypto.decrypt_value(key_bytes, token, aad=name)
@@ -376,9 +404,18 @@ def verify_key(parsed: parser.ParsedEnv, key_bytes: bytes) -> None:
         )
 
 
+def _reject_asymmetric_for_master_key(parsed: parser.ParsedEnv) -> None:
+    if _is_asymmetric(parsed):
+        raise DecryptionError(
+            "This file is encrypted in asymmetric (multi-recipient) mode; "
+            "decrypt it with a recipient private key, not a master key."
+        )
+
+
 def decrypt_text(text: str, key_bytes: bytes) -> str:
     """Decrypt all encrypted values in ``text``; return cleartext ``.env`` text."""
     parsed = parser.parse(text)
+    _reject_asymmetric_for_master_key(parsed)
     verify_key(parsed, key_bytes)
     for record in parsed.records:
         if record.kind != "entry":
@@ -395,6 +432,7 @@ def decrypt_text(text: str, key_bytes: bytes) -> str:
 def decrypt_to_dict(text: str, key_bytes: bytes) -> Dict[str, str]:
     """Decrypt ``text`` into a ``{name: value}`` mapping, in memory only."""
     parsed = parser.parse(text)
+    _reject_asymmetric_for_master_key(parsed)
     verify_key(parsed, key_bytes)
     result: Dict[str, str] = {}
     for record in parsed.records:

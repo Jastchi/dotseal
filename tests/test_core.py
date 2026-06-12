@@ -5,6 +5,8 @@ import pytest
 
 from dotseal import core, crypto, parser
 from dotseal.exceptions import (
+    DecryptionError,
+    EncryptionError,
     KeyFingerprintMismatchError,
     MasterKeyNotFoundError,
     PrivateKeyNotFoundError,
@@ -221,6 +223,25 @@ def test_parse_metadata_skips_tokens_without_equals():
     parsed = parser.parse(text)
     meta = core.parse_metadata(parsed)
     assert meta == {"v": "1", "alg": "AES_GCM"}
+
+
+def test_parse_metadata_ignores_fake_dotseal_comment():
+    key = crypto.load_key_bytes(crypto.generate_master_key())
+    enc = core.encrypt_text("FOO=bar\n", key)
+    tampered = "# dotseal: managed file, do not touch\n" + enc
+    meta = core.parse_metadata(parser.parse(tampered))
+    assert meta.get("v") == "1"
+    assert meta.get("key_fp") == crypto.key_fingerprint(key)
+
+
+def test_file_mode_asymmetric_from_recipients_without_footer():
+    _, pub = crypto.generate_recipient_keypair()
+    enc = core.encrypt_text_asymmetric("FOO=bar\n", [pub])
+    lines = [
+        line for line in enc.splitlines() if not line.strip().startswith("# dotseal: v=")
+    ]
+    damaged = "\n".join(lines) + "\n"
+    assert core.file_mode(damaged) == "asymmetric"
 
 
 def test_parse_recipients_skips_tokens_without_equals():
@@ -468,6 +489,22 @@ def test_reencrypt_text_wrong_key_raises():
     original = core.encrypt_text("FOO=bar\n", k1)
     with pytest.raises(KeyFingerprintMismatchError):
         core.reencrypt_text("FOO=baz\n", k2, original)
+
+
+def test_reencrypt_text_rejects_asymmetric_file():
+    _, pub = crypto.generate_recipient_keypair()
+    original = core.encrypt_text_asymmetric("FOO=bar\n", [pub])
+    key = crypto.load_key_bytes(crypto.generate_master_key())
+    with pytest.raises(EncryptionError, match="asymmetric"):
+        core.reencrypt_text("FOO=baz\n", key, original)
+
+
+def test_decrypt_to_dict_rejects_asymmetric_with_master_key():
+    _, pub = crypto.generate_recipient_keypair()
+    enc = core.encrypt_text_asymmetric("FOO=bar\n", [pub])
+    key = crypto.load_key_bytes(crypto.generate_master_key())
+    with pytest.raises(DecryptionError, match="asymmetric"):
+        core.decrypt_to_dict(enc, key)
 
 
 def test_reencrypt_text_asymmetric_reuses_unchanged_ciphertexts():

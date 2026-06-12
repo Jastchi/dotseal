@@ -91,17 +91,25 @@ def _secure_delete(path: str) -> None:
 
 # --- gitignore handling -----------------------------------------------------
 
-def _gitignore_line_covers(line: str, name: str) -> bool:
-    """True if a single .gitignore line already ignores ``name``.
+def _gitignore_covers(content: str, name: str) -> bool:
+    """True if the .gitignore ``content`` leaves ``name`` ignored.
 
-    Handles exact entries and simple glob patterns (e.g. ``*.key``); negations
-    and comments never count as covering.
+    Lines are evaluated in order so a later ``!name`` negation re-includes the
+    file, mirroring git's last-match-wins rule. Only exact entries and simple
+    glob patterns (e.g. ``*.key``) are recognized.
     """
-    entry = line.strip()
-    if not entry or entry.startswith(("#", "!")):
-        return False
-    entry = entry.rstrip("/").lstrip("/")
-    return entry == name or fnmatch.fnmatch(name, entry)
+    covered = False
+    for line in content.splitlines():
+        entry = line.strip()
+        if not entry or entry.startswith("#"):
+            continue
+        negated = entry.startswith("!")
+        if negated:
+            entry = entry[1:].strip()
+        entry = entry.rstrip("/").lstrip("/")
+        if entry and (entry == name or fnmatch.fnmatch(name, entry)):
+            covered = not negated
+    return covered
 
 
 def _ensure_gitignored(name: str, directory: str) -> str:
@@ -110,7 +118,7 @@ def _ensure_gitignored(name: str, directory: str) -> str:
     if os.path.isfile(gitignore):
         with open(gitignore, "r", encoding="utf-8") as fh:
             content = fh.read()
-        if any(_gitignore_line_covers(line, name) for line in content.splitlines()):
+        if _gitignore_covers(content, name):
             return f"{name} already present in .gitignore"
         sep = "" if content.endswith("\n") or content == "" else "\n"
         with open(gitignore, "a", encoding="utf-8") as fh:
@@ -197,11 +205,7 @@ def cmd_encrypt(args: argparse.Namespace) -> int:
         out = core.encrypt_text_asymmetric(text, recipients)
         mode_note = f"{len(recipients)} recipient(s)"
     else:
-        key_bytes = bytearray(_resolve_key_bytes(args, search_dir=search_dir))
-        try:
-            out = core.encrypt_text(text, bytes(key_bytes))
-        finally:
-            crypto._zero(key_bytes)
+        out = core.encrypt_text(text, _resolve_key_bytes(args, search_dir=search_dir))
         mode_note = "symmetric"
 
     # .env.enc is safe to commit -> default permissions are fine.
@@ -219,11 +223,7 @@ def cmd_decrypt(args: argparse.Namespace) -> int:
         private_key = _resolve_private_key(args, search_dir=search_dir)
         out = core.decrypt_text_asymmetric(text, private_key)
     else:
-        key_bytes = bytearray(_resolve_key_bytes(args, search_dir=search_dir))
-        try:
-            out = core.decrypt_text(text, bytes(key_bytes))
-        finally:
-            crypto._zero(key_bytes)
+        out = core.decrypt_text(text, _resolve_key_bytes(args, search_dir=search_dir))
     # Cleartext output contains secrets -> owner-only perms.
     core.write_secret_file(args.output, out, mode=0o600)
     print(f"Decrypted {args.input} -> {args.output} (mode 0600)")
@@ -243,6 +243,7 @@ def cmd_edit(args: argparse.Namespace) -> int:
     search_dir = os.path.dirname(os.path.abspath(args.input))
     original_text = None
     is_asym = False
+    recipients: List[str] = []
 
     if os.path.isfile(args.input):
         original_text = _read(args.input)
@@ -251,11 +252,9 @@ def cmd_edit(args: argparse.Namespace) -> int:
             private_key = _resolve_private_key(args, search_dir=search_dir)
             cleartext = core.decrypt_text_asymmetric(original_text, private_key)
         else:
-            key_bytes = bytearray(_resolve_key_bytes(args, search_dir=search_dir))
-            try:
-                cleartext = core.decrypt_text(original_text, bytes(key_bytes))
-            finally:
-                crypto._zero(key_bytes)
+            cleartext = core.decrypt_text(
+                original_text, _resolve_key_bytes(args, search_dir=search_dir)
+            )
     else:
         # Allow creating a new encrypted file by editing from scratch.
         recipients = _collect_recipients(args)
@@ -287,8 +286,11 @@ def cmd_edit(args: argparse.Namespace) -> int:
             with open(tmp_path, "r", encoding="utf-8") as fh:
                 edited = fh.read()
 
-            if original_text is not None and edited == cleartext:
-                print(f"No changes; {args.input} left untouched.")
+            if edited == cleartext:
+                if original_text is not None:
+                    print(f"No changes; {args.input} left untouched.")
+                else:
+                    print(f"No changes; {args.input} was not created.")
                 return 0
 
             try:
@@ -297,17 +299,14 @@ def cmd_edit(args: argparse.Namespace) -> int:
                     private_key = _resolve_private_key(args, search_dir=search_dir)
                     out = core.reencrypt_text_asymmetric(edited, private_key, original_text)
                 elif is_asym:
-                    out = core.encrypt_text_asymmetric(edited, _collect_recipients(args))
+                    out = core.encrypt_text_asymmetric(edited, recipients)
                 else:
-                    key_bytes = bytearray(_resolve_key_bytes(args, search_dir=search_dir))
-                    try:
-                        if original_text is not None:
-                            # Unchanged values keep their ciphertext (diff-friendly).
-                            out = core.reencrypt_text(edited, bytes(key_bytes), original_text)
-                        else:
-                            out = core.encrypt_text(edited, bytes(key_bytes))
-                    finally:
-                        crypto._zero(key_bytes)
+                    key_bytes = _resolve_key_bytes(args, search_dir=search_dir)
+                    if original_text is not None:
+                        # Unchanged values keep their ciphertext (diff-friendly).
+                        out = core.reencrypt_text(edited, key_bytes, original_text)
+                    else:
+                        out = core.encrypt_text(edited, key_bytes)
                 break
             except DotsealError as exc:
                 # Never throw the user's edits away over a typo: offer to

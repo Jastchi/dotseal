@@ -27,6 +27,12 @@ def test_load_key_bytes_rejects_invalid(bad):
         crypto.load_key_bytes(bad)
 
 
+def test_load_key_bytes_rejects_non_canonical_base64():
+    canonical = crypto.generate_master_key()
+    with pytest.raises(InvalidMasterKeyError):
+        crypto.load_key_bytes(canonical.rstrip("="))
+
+
 def test_fingerprint_is_stable_and_short():
     raw = base64.b64decode(crypto.generate_master_key())
     fp1 = crypto.key_fingerprint(raw)
@@ -64,7 +70,7 @@ def test_aad_mismatch_fails():
     """A ciphertext for one key name must not decrypt under another (no swapping)."""
     key = crypto.load_key_bytes(crypto.generate_master_key())
     token = crypto.encrypt_value(key, "secret", aad="ADMIN_TOKEN")
-    with pytest.raises(DecryptionError):
+    with pytest.raises(DecryptionError, match="variable name"):
         crypto.decrypt_value(key, token, aad="GUEST_TOKEN")
 
 

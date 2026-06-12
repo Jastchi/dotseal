@@ -184,6 +184,18 @@ def test_edit_new_file_symmetric(project, monkeypatch):
     assert (project / "brand-new.env.enc").is_file()
 
 
+def test_edit_new_file_unchanged_does_not_create(project, monkeypatch, capsys):
+    editor_script = project / "noop_editor.py"
+    editor_script.write_text("import sys\n")
+    monkeypatch.setenv("EDITOR", f"{sys.executable} {editor_script}")
+    assert main(["init"]) == 0
+    target = project / "brand-new.env.enc"
+    assert not target.exists()
+    assert main(["edit", "brand-new.env.enc"]) == 0
+    assert not target.exists()
+    assert "was not created" in capsys.readouterr().out
+
+
 def test_edit_new_file_asymmetric(project, monkeypatch):
     editor_script = project / "fake_editor.py"
     editor_script.write_text(
@@ -344,3 +356,12 @@ def test_init_recognizes_covering_gitignore_pattern(project, capsys):
     assert "already present" in capsys.readouterr().out
     # No duplicate entry appended.
     assert ".dotseal.key" not in (project / ".gitignore").read_text()
+
+
+def test_init_appends_when_gitignore_negation_reincludes_key(project, capsys):
+    gitignore = project / ".gitignore"
+    gitignore.write_text(".dotseal.key\n!.dotseal.key\n")
+    assert main(["init"]) == 0
+    out = capsys.readouterr().out
+    assert "already present" not in out
+    assert gitignore.read_text().count(".dotseal.key\n") >= 2

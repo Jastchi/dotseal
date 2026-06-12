@@ -15,6 +15,7 @@ def record_to_dict(record: parser.Record) -> dict[str, object]:
         "key": record.key,
         "value": record.value,
         "export": record.export,
+        "comment": record.comment,
     }
 
 

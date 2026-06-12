@@ -26,10 +26,12 @@
   "main": "./dist/extension.js",
   "scripts": {
     "build": "node esbuild.mjs",
+    "ensure-test-fixtures": "sh scripts/ensure-test-fixtures.sh",
+    "prewatch": "npm run ensure-test-fixtures",
     "watch": "node esbuild.mjs --watch",
     "check": "tsc --noEmit",
     "test": "vitest run",
-    "pretest": "npm run build && npm run check"
+    "pretest": "npm run ensure-test-fixtures && npm run build && npm run check"
   },
   "contributes": {
     "commands": [

@@ -32,7 +32,9 @@ const PARSER_FIXTURES = [
   "KEY =  value  \n",
   'KEY="  a\\tb\\nc  "\n',
   "KEY='no\\nescape'\n",
-  "# hello\nexport API_KEY = \"line\\nvalue\"\nEMPTY=\n\n"
+  "# hello\nexport API_KEY = \"line\\nvalue\"\nEMPTY=\n\n",
+  "FOO=bar # production key\nPASS=ab#cd\n",
+  'QUOTED="x" # after quote\n'
 ];
 
 const FORMAT_VALUES = [

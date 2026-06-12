@@ -66,3 +66,29 @@ def test_serialize_blank_line():
     parsed = parser.parse("FOO=bar\n\nBAZ=qux\n")
     result = parser.serialize(parsed)
     assert result == "FOO=bar\n\nBAZ=qux\n"
+
+
+def test_inline_comment_stripped_from_unquoted_value():
+    parsed = parser.parse("FOO=bar # production key\n")
+    entry = parsed.entries()[0]
+    assert entry.value == "bar"
+    assert entry.comment == " # production key"
+
+
+def test_hash_without_leading_whitespace_stays_in_value():
+    parsed = parser.parse("PASS=ab#cd\n")
+    entry = parsed.entries()[0]
+    assert entry.value == "ab#cd"
+    assert entry.comment == ""
+
+
+def test_inline_comment_roundtrip():
+    text = "FOO=bar # note\nPASS=ab#cd\n"
+    assert parser.serialize(parser.parse(text)) == text
+
+
+def test_quoted_value_with_inline_comment():
+    parsed = parser.parse('QUOTED="x" # after quote\n')
+    entry = parsed.entries()[0]
+    assert entry.value == "x"
+    assert entry.comment == " # after quote"
