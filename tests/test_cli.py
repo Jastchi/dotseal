@@ -377,6 +377,26 @@ def test_edit_preserves_existing_plain_policy(project, monkeypatch):
     assert "plain_keys=PUBLIC" in enc
 
 
+def test_edit_warns_when_policy_override_seals_keys(project, monkeypatch, capsys):
+    editor_script = project / "fake_editor.py"
+    editor_script.write_text(
+        "import sys\n"
+        "p = sys.argv[1]\n"
+        "text = open(p).read().replace('FOO=old', 'FOO=new')\n"
+        "open(p, 'w').write(text)\n"
+    )
+    monkeypatch.setenv("EDITOR", f"{sys.executable} {editor_script}")
+
+    (project / ".env").write_text("FOO=old\nSECRET=old\n")
+    assert main(["init"]) == 0
+    assert main(["encrypt", "--plain-key", "FOO"]) == 0
+    assert main(["edit", "--plain-key", "BAR"]) == 0
+    err = capsys.readouterr().err
+    assert "warning: policy override will seal previously plaintext keys: FOO" in err
+    enc = (project / ".env.enc").read_text()
+    assert "FOO=ENC[AES_GCM,data:" in enc
+
+
 # --- encrypt: refuses to brick a re-encrypted file ----------------------------
 
 def test_encrypt_after_key_rotation_fails_loudly(project, capsys):

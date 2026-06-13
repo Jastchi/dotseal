@@ -94,11 +94,18 @@ function resolvePlaintextPolicy(
   plainKeyRegex: string[];
   plainKeyRegexCompiled: RegExp[];
 } {
+  const existing = parsePlaintextPolicy(parseMetadata(parsed));
   if (options?.plainKeys === undefined && options?.plainKeyRegex === undefined) {
-    return parsePlaintextPolicy(parseMetadata(parsed));
+    return existing;
   }
-  const plainKeys = new Set((options?.plainKeys ?? []).filter((key) => key.length > 0));
-  const plainKeyRegex = (options?.plainKeyRegex ?? []).filter((pattern) => pattern.length > 0);
+  const plainKeys =
+    options?.plainKeys === undefined
+      ? existing.plainKeys
+      : new Set((options.plainKeys ?? []).filter((key) => key.length > 0));
+  const plainKeyRegex =
+    options?.plainKeyRegex === undefined
+      ? existing.plainKeyRegex
+      : (options.plainKeyRegex ?? []).filter((pattern) => pattern.length > 0);
   const plainKeyRegexCompiled = plainKeyRegex.map((pattern) => {
     try {
       return new RegExp(pattern);

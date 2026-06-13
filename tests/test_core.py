@@ -474,6 +474,46 @@ def test_reencrypt_text_preserves_metadata_policy_by_default():
     assert meta.get(core.PLAINTEXT_KEYS_TOKEN) == "PUBLIC"
 
 
+def test_reencrypt_partial_plain_key_override_merges_regex():
+    key = crypto.load_key_bytes(crypto.generate_master_key())
+    original = core.encrypt_text(
+        "FOO=old\nPUBLIC_EXTRA=old\nSECRET=old\n",
+        key,
+        plain_keys=["FOO"],
+        plain_key_regex=[r"PUBLIC_.+"],
+    )
+    updated = core.reencrypt_text(
+        "FOO=still\nPUBLIC_EXTRA=still\nSECRET=still\n",
+        key,
+        original,
+        plain_keys=["BAR"],
+    )
+    entries = {e.key: e.value for e in parser.parse(updated).entries()}
+    meta = core.parse_metadata(parser.parse(updated))
+    assert meta.get(core.PLAINTEXT_REGEX_TOKEN)
+    assert meta.get(core.PLAINTEXT_KEYS_TOKEN) == "BAR"
+    assert entries["FOO"].startswith("ENC[")
+    assert entries["PUBLIC_EXTRA"] == "still"
+    assert entries["SECRET"].startswith("ENC[")
+
+
+def test_keys_newly_sealed_by_policy_override():
+    key = crypto.load_key_bytes(crypto.generate_master_key())
+    original = core.encrypt_text(
+        "FOO=old\nPUBLIC_EXTRA=old\n",
+        key,
+        plain_keys=["FOO"],
+        plain_key_regex=[r"PUBLIC_.+"],
+    )
+    cleartext = parser.parse("FOO=still\nPUBLIC_EXTRA=still\n")
+    assert core.keys_newly_sealed_by_policy_override(
+        parser.parse(original), cleartext, plain_keys=["BAR"]
+    ) == ["FOO"]
+    assert core.keys_newly_sealed_by_policy_override(
+        parser.parse(original), cleartext
+    ) == []
+
+
 def test_add_rm_recipient_preserves_metadata_policy():
     priv_a, pub_a = crypto.generate_recipient_keypair()
     _, pub_b = crypto.generate_recipient_keypair()

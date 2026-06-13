@@ -21,7 +21,7 @@ import sys
 import tempfile
 from typing import List, Optional
 
-from . import __version__, core, crypto
+from . import __version__, core, crypto, parser
 from .exceptions import DotsealError
 
 _GITIGNORE_NOTE = "# Added by `dotseal init` -- never commit your master key"
@@ -38,6 +38,32 @@ def _read(path: str) -> str:
 
 def _err(msg: str) -> None:
     print(f"dotseal: error: {msg}", file=sys.stderr)
+
+
+def _warn(msg: str) -> None:
+    print(f"dotseal: warning: {msg}", file=sys.stderr)
+
+
+def _warn_policy_override(
+    original_text: str,
+    cleartext: str,
+    *,
+    plain_keys: Optional[List[str]],
+    plain_key_regex: Optional[List[str]],
+) -> None:
+    if plain_keys is None and plain_key_regex is None:
+        return
+    keys = core.keys_newly_sealed_by_policy_override(
+        parser.parse(original_text),
+        parser.parse(cleartext),
+        plain_keys=plain_keys,
+        plain_key_regex=plain_key_regex,
+    )
+    if keys:
+        _warn(
+            "policy override will seal previously plaintext keys: "
+            + ", ".join(keys)
+        )
 
 
 def _resolve_key_bytes(args: argparse.Namespace, *, search_dir: str) -> bytes:
@@ -200,21 +226,29 @@ def cmd_encrypt(args: argparse.Namespace) -> int:
     text = _read(args.input)
     search_dir = os.path.dirname(os.path.abspath(args.input))
     recipients = _collect_recipients(args)
+    plain_keys = getattr(args, "plain_key", None)
+    plain_key_regex = getattr(args, "plain_key_regex", None)
+    _warn_policy_override(
+        text,
+        text,
+        plain_keys=plain_keys,
+        plain_key_regex=plain_key_regex,
+    )
 
     if recipients:
         out = core.encrypt_text_asymmetric(
             text,
             recipients,
-            plain_keys=getattr(args, "plain_key", None),
-            plain_key_regex=getattr(args, "plain_key_regex", None),
+            plain_keys=plain_keys,
+            plain_key_regex=plain_key_regex,
         )
         mode_note = f"{len(recipients)} recipient(s)"
     else:
         out = core.encrypt_text(
             text,
             _resolve_key_bytes(args, search_dir=search_dir),
-            plain_keys=getattr(args, "plain_key", None),
-            plain_key_regex=getattr(args, "plain_key_regex", None),
+            plain_keys=plain_keys,
+            plain_key_regex=plain_key_regex,
         )
         mode_note = "symmetric"
 
@@ -303,6 +337,16 @@ def cmd_edit(args: argparse.Namespace) -> int:
                     print(f"No changes; {args.input} was not created.")
                 return 0
 
+            plain_keys = getattr(args, "plain_key", None)
+            plain_key_regex = getattr(args, "plain_key_regex", None)
+            if original_text is not None:
+                _warn_policy_override(
+                    original_text,
+                    edited,
+                    plain_keys=plain_keys,
+                    plain_key_regex=plain_key_regex,
+                )
+
             try:
                 if is_asym and original_text is not None:
                     # Re-encrypt reusing the original DEK + recipients (only our key needed).
@@ -311,15 +355,15 @@ def cmd_edit(args: argparse.Namespace) -> int:
                         edited,
                         private_key,
                         original_text,
-                        plain_keys=getattr(args, "plain_key", None),
-                        plain_key_regex=getattr(args, "plain_key_regex", None),
+                        plain_keys=plain_keys,
+                        plain_key_regex=plain_key_regex,
                     )
                 elif is_asym:
                     out = core.encrypt_text_asymmetric(
                         edited,
                         recipients,
-                        plain_keys=getattr(args, "plain_key", None),
-                        plain_key_regex=getattr(args, "plain_key_regex", None),
+                        plain_keys=plain_keys,
+                        plain_key_regex=plain_key_regex,
                     )
                 else:
                     key_bytes = _resolve_key_bytes(args, search_dir=search_dir)
@@ -329,15 +373,15 @@ def cmd_edit(args: argparse.Namespace) -> int:
                             edited,
                             key_bytes,
                             original_text,
-                            plain_keys=getattr(args, "plain_key", None),
-                            plain_key_regex=getattr(args, "plain_key_regex", None),
+                            plain_keys=plain_keys,
+                            plain_key_regex=plain_key_regex,
                         )
                     else:
                         out = core.encrypt_text(
                             edited,
                             key_bytes,
-                            plain_keys=getattr(args, "plain_key", None),
-                            plain_key_regex=getattr(args, "plain_key_regex", None),
+                            plain_keys=plain_keys,
+                            plain_key_regex=plain_key_regex,
                         )
                 break
             except DotsealError as exc:

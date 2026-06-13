@@ -196,6 +196,24 @@ describe("dotseal core reencryptText", () => {
     expect(result).toContain("plain_keys=PUBLIC");
   });
 
+  it("merges unspecified policy dimensions on partial override", () => {
+    const original = encryptText("FOO=old\nPUBLIC_EXTRA=old\nSECRET=old\n", keyBytes, {
+      plainKeys: ["FOO"],
+      plainKeyRegex: ["PUBLIC_.+"]
+    });
+    const result = reencryptText(
+      "FOO=still\nPUBLIC_EXTRA=still\nSECRET=still\n",
+      keyBytes,
+      original,
+      { plainKeys: ["BAR"] }
+    );
+
+    expect(result).toContain("FOO=ENC[AES_GCM,data:");
+    expect(result).toContain("PUBLIC_EXTRA=still");
+    expect(result).toContain("plain_re=");
+    expect(result).toContain("plain_keys=BAR");
+  });
+
   it("refuses a wrong key via the fingerprint", () => {
     const otherKey = loadKeyBytes(Buffer.alloc(32, 2).toString("base64"));
     const original = encryptText("FOO=bar\n", keyBytes);

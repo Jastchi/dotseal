@@ -238,13 +238,47 @@ def _resolved_plaintext_policy(
     plain_keys: Optional[List[str]],
     plain_key_regex: Optional[List[str]],
 ) -> Tuple[Set[str], List[str], List[Pattern[str]]]:
+    existing_keys, existing_regex = parse_plaintext_policy(parse_metadata(parsed))
     if plain_keys is None and plain_key_regex is None:
-        resolved_keys, resolved_regex = parse_plaintext_policy(parse_metadata(parsed))
+        resolved_keys, resolved_regex = existing_keys, existing_regex
     else:
-        resolved_keys = {name for name in (plain_keys or []) if name}
-        resolved_regex = [pattern for pattern in (plain_key_regex or []) if pattern]
+        if plain_keys is None:
+            resolved_keys = existing_keys
+        else:
+            resolved_keys = {name for name in plain_keys if name}
+        if plain_key_regex is None:
+            resolved_regex = existing_regex
+        else:
+            resolved_regex = [pattern for pattern in plain_key_regex if pattern]
     compiled = _compile_regexes(resolved_regex)
     return resolved_keys, resolved_regex, compiled
+
+
+def keys_newly_sealed_by_policy_override(
+    original: parser.ParsedEnv,
+    cleartext: parser.ParsedEnv,
+    *,
+    plain_keys: Optional[List[str]] = None,
+    plain_key_regex: Optional[List[str]] = None,
+) -> List[str]:
+    """Entry keys that were plaintext under the file policy but will be sealed under the override."""
+    if plain_keys is None and plain_key_regex is None:
+        return []
+    old_keys, old_regex = parse_plaintext_policy(parse_metadata(original))
+    old_compiled = _compile_regexes(old_regex)
+    new_keys, new_regex, new_compiled = _resolved_plaintext_policy(
+        original, plain_keys, plain_key_regex
+    )
+    newly_sealed: List[str] = []
+    for record in cleartext.records:
+        if record.kind != "entry":
+            continue
+        key = record.key
+        was_plain = not _should_encrypt_value(key, old_keys, old_compiled)
+        will_seal = _should_encrypt_value(key, new_keys, new_compiled)
+        if was_plain and will_seal:
+            newly_sealed.append(key)
+    return sorted(newly_sealed)
 
 
 def _should_encrypt_value(
