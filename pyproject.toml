@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "dotseal"
-version = "0.2.0"
+version = "0.2.1"
 description = "Git-friendly encrypted .env files with cleartext keys and sealed values (SOPS-inspired structural encryption)."
 readme = "README.md"
 requires-python = ">=3.9"

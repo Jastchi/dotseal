@@ -2,7 +2,7 @@
   "name": "dotseal-vscode",
   "displayName": "dotseal",
   "description": "Edit dotseal encrypted env files (.env.enc, .env.production.enc, …) as decrypted virtual documents.",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "publisher": "dotseal",
   "license": "MIT",
   "repository": {
