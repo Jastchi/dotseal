@@ -471,6 +471,19 @@ def encrypt_text(
         else:
             record.value = parser.format_value(record.value)
 
+    # Drop from plain_keys any key that ended up ENC[…] in the output.
+    # A key that was already encrypted and was skipped by the idempotency guard
+    # must not appear in the footer: if it did, the next `dotseal edit` would
+    # inherit that policy and silently unseal it without an explicit --plain-key
+    # from the user.  Keys in the policy that simply don't exist in this file
+    # (forward-looking entries) are kept as-is.
+    encrypted_in_output: Set[str] = {
+        r.key
+        for r in parsed.records
+        if r.kind == "entry" and crypto.is_encrypted_value(r.value)
+    }
+    written_plain_keys = resolved_plain_keys - encrypted_in_output
+
     body = parser.serialize(parsed).rstrip("\n")
     parts = [BANNER]
     if body:
@@ -478,7 +491,7 @@ def encrypt_text(
     parts.append(
         build_metadata_line(
             key_bytes,
-            plain_keys=resolved_plain_keys,
+            plain_keys=written_plain_keys,
             plain_key_regex=resolved_plain_regex,
         )
     )
@@ -699,6 +712,13 @@ def encrypt_text_asymmetric(
         else:
             record.value = parser.format_value(record.value)
 
+    encrypted_in_output: Set[str] = {
+        r.key
+        for r in parsed.records
+        if r.kind == "entry" and crypto.is_encrypted_value(r.value)
+    }
+    written_plain_keys = resolved_plain_keys - encrypted_in_output
+
     recipients = []
     for pub in pubs:
         ephem, enc = crypto.wrap_dek(crypto.load_recipient_public_key(pub), dek)
@@ -708,7 +728,7 @@ def encrypt_text_asymmetric(
     return _assemble_asym(
         parsed,
         recipients,
-        plain_keys=resolved_plain_keys,
+        plain_keys=written_plain_keys,
         plain_key_regex=resolved_plain_regex,
     )
 

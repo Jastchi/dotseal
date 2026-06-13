@@ -44,6 +44,35 @@ def _warn(msg: str) -> None:
     print(f"dotseal: warning: {msg}", file=sys.stderr)
 
 
+def _warn_plain_keys_already_encrypted(
+    text: str,
+    plain_keys: Optional[List[str]],
+) -> None:
+    """Warn when --plain-key names a value that is already ENC[...].
+
+    encrypt_text is idempotent on ciphertext, so the value won't be unsealed
+    by this run — only the footer policy changes.  Without this warning the
+    user might not realise that the next `dotseal edit` will write that value
+    as cleartext once the footer policy is inherited.
+    """
+    if not plain_keys:
+        return
+    parsed = parser.parse(text)
+    already_enc = sorted(
+        k for k in plain_keys
+        if any(
+            r.kind == "entry" and r.key == k and crypto.is_encrypted_value(r.value)
+            for r in parsed.records
+        )
+    )
+    if already_enc:
+        _warn(
+            "--plain-key has no effect on already-encrypted values: "
+            + ", ".join(already_enc)
+            + "; use 'dotseal edit --plain-key' to unseal"
+        )
+
+
 def _warn_policy_override(
     original_text: str,
     cleartext: str,
@@ -234,6 +263,7 @@ def cmd_encrypt(args: argparse.Namespace) -> int:
         plain_keys=plain_keys,
         plain_key_regex=plain_key_regex,
     )
+    _warn_plain_keys_already_encrypted(text, plain_keys)
 
     if recipients:
         out = core.encrypt_text_asymmetric(

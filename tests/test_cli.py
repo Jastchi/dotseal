@@ -388,17 +388,21 @@ def test_encrypt_warns_when_policy_override_seals_keys(project, capsys):
     assert "FOO=ENC[AES_GCM,data:" in enc
 
 
-def test_encrypt_idempotent_expanding_plain_key_set_keeps_sealed_values(project):
+def test_encrypt_idempotent_expanding_plain_key_set_keeps_sealed_values(project, capsys):
     (project / ".env").write_text("SECRET=shh\n")
     assert main(["init"]) == 0
     assert main(["encrypt"]) == 0
     assert main(["encrypt", ".env.enc", ".env.enc", "--plain-key", "SECRET"]) == 0
     enc = (project / ".env.enc").read_text()
-    assert "plain_keys=SECRET" in enc
+    # SECRET was already ENC[…] — the idempotency guard keeps it encrypted
+    # and must NOT write it to plain_keys (that would silently unseal it on
+    # the next edit).  A warning is emitted instead.
+    assert "plain_keys=" not in enc
     assert "SECRET=ENC[AES_GCM,data:" in enc
+    assert "SECRET" in capsys.readouterr().err
 
 
-def test_encrypt_partial_override_footer_mismatches_enc_values(project):
+def test_encrypt_partial_override_footer_mismatches_enc_values(project, capsys):
     (project / ".env").write_text("SECRET=shh\nPUBLIC=ok\n")
     assert main(["init"]) == 0
     assert main(["encrypt"]) == 0
@@ -406,9 +410,12 @@ def test_encrypt_partial_override_footer_mismatches_enc_values(project):
         ["encrypt", ".env.enc", ".env.enc", "--plain-key", "SECRET", "--plain-key", "PUBLIC"]
     ) == 0
     enc = (project / ".env.enc").read_text()
-    assert "plain_keys=PUBLIC,SECRET" in enc
+    # Both values are already ENC[…] — neither should appear in plain_keys.
+    assert "plain_keys=" not in enc
     assert "SECRET=ENC[AES_GCM,data:" in enc
     assert "PUBLIC=ENC[AES_GCM,data:" in enc
+    err = capsys.readouterr().err
+    assert "PUBLIC" in err and "SECRET" in err
 
 
 def test_edit_warns_when_policy_override_seals_keys(project, monkeypatch, capsys):

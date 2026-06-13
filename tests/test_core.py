@@ -728,7 +728,10 @@ def test_encrypt_text_idempotent_expanding_plain_key_set_keeps_sealed_values():
     enc2 = core.encrypt_text(enc, key, plain_keys=["SECRET"])
     entries = {e.key: e.value for e in parser.parse(enc2).entries()}
     meta = core.parse_metadata(parser.parse(enc2))
-    assert meta.get(core.PLAINTEXT_KEYS_TOKEN) == "SECRET"
+    # SECRET was already ENC[…]; the idempotency guard keeps the value
+    # encrypted, so it must NOT appear in plain_keys (that would cause the
+    # next `edit` to silently unseal it).
+    assert core.PLAINTEXT_KEYS_TOKEN not in meta
     assert entries["SECRET"].startswith("ENC[")
     assert core.decrypt_to_dict(enc2, key) == {"SECRET": "shh"}
 
@@ -739,7 +742,8 @@ def test_encrypt_text_partial_override_rewrites_footer_without_unsealing():
     enc2 = core.encrypt_text(enc, key, plain_keys=["SECRET", "PUBLIC"])
     entries = {e.key: e.value for e in parser.parse(enc2).entries()}
     meta = core.parse_metadata(parser.parse(enc2))
-    assert meta.get(core.PLAINTEXT_KEYS_TOKEN) == "PUBLIC,SECRET"
+    # Both keys are already ENC[…]; neither should appear in plain_keys.
+    assert core.PLAINTEXT_KEYS_TOKEN not in meta
     assert entries["SECRET"].startswith("ENC[")
     assert entries["PUBLIC"].startswith("ENC[")
     assert core.decrypt_to_dict(enc2, key) == {"SECRET": "shh", "PUBLIC": "ok"}
@@ -757,6 +761,8 @@ def test_encrypt_text_partial_plain_key_override_merges_regex_on_rerun():
     entries = {e.key: e.value for e in parser.parse(enc2).entries()}
     meta = core.parse_metadata(parser.parse(enc2))
     assert meta.get(core.PLAINTEXT_REGEX_TOKEN)
+    # BAR does not exist in the input file, so it is not encrypted in the
+    # output; it is a forward-looking policy entry and must stay in the footer.
     assert meta.get(core.PLAINTEXT_KEYS_TOKEN) == "BAR"
     assert entries["FOO"].startswith("ENC[")
     assert entries["PUBLIC_EXTRA"] == "old"
