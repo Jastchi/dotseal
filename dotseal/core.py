@@ -1003,7 +1003,6 @@ def set_value(
         if record.kind == "entry" and record.key == key:
             record.value = formatted
             found = True
-            break
     if not found:
         parsed.records.append(parser.Record(kind="entry", key=key, value=formatted))
 
