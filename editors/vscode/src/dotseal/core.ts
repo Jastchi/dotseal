@@ -36,7 +36,16 @@ export interface SelectiveEncryptionOptions {
 
 function encodeRegexToken(patterns: string[]): string {
   return patterns
-    .map((pattern) => Buffer.from(pattern, "utf8").toString("base64url"))
+    .map((pattern) =>
+      // Use standard base64 (which includes '=' padding) then swap '+' and '/'
+      // to the URL-safe alphabet.  Node's built-in "base64url" encoding omits
+      // padding, which breaks Python's base64.urlsafe_b64decode.  Keeping '='
+      // makes Python and TypeScript output identical.
+      Buffer.from(pattern, "utf8")
+        .toString("base64")
+        .replace(/\+/g, "-")
+        .replace(/\//g, "_")
+    )
     .join(",");
 }
 

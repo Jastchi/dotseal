@@ -191,7 +191,11 @@ def _decode_regex_token(token: str) -> List[str]:
         if not text:
             continue
         try:
-            decoded = base64.urlsafe_b64decode(text.encode("ascii")).decode("utf-8")
+            # Add padding defensively: Node.js base64url omits '=' but Python's
+            # urlsafe_b64decode requires it.  Extra '=' is harmless when already
+            # padded (Python-written tokens).
+            padded = text + "=" * (-len(text) % 4)
+            decoded = base64.urlsafe_b64decode(padded.encode("ascii")).decode("utf-8")
         except Exception as exc:  # pragma: no cover - defensive
             raise EncryptionError(
                 "Invalid dotseal metadata: failed to decode plain-key regex policy."
@@ -200,9 +204,27 @@ def _decode_regex_token(token: str) -> List[str]:
     return patterns
 
 
+# Python-only regex syntax that JavaScript's RegExp constructor cannot parse:
+# inline flags (?i), (?im), (?i:…), negated flags (?-i), Python named groups
+# (?P<name>) / backreferences (?P=name), and inline comments (?#…).
+_PYTHON_ONLY_REGEX_SYNTAX = re.compile(
+    r"\(\?[aiLmsux]"   # inline flag(s): (?i, (?im, (?i:…
+    r"|\(\?-[aiLmsux]" # negated flag: (?-i
+    r"|\(\?P[<=]"      # Python named group (?P<name>) or backreference (?P=name)
+    r"|\(\?#"          # inline comment (?#…)
+)
+
+
 def _compile_regexes(regexes: List[str]) -> List[Pattern[str]]:
     compiled: List[Pattern[str]] = []
     for pattern in regexes:
+        if _PYTHON_ONLY_REGEX_SYNTAX.search(pattern):
+            raise EncryptionError(
+                f"Plain-key regex {pattern!r} uses Python-only syntax "
+                "(inline flags, (?P<…>), (?P=…), or (?#…) comments) that the "
+                "VS Code extension cannot compile. Use JavaScript-compatible "
+                "regex syntax instead (e.g. replace (?i)FOO with [Ff][Oo][Oo])."
+            )
         try:
             compiled.append(re.compile(pattern))
         except re.error as exc:
