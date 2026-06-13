@@ -881,3 +881,141 @@ def test_encrypt_text_rejects_invalid_regex():
     key = crypto.load_key_bytes(crypto.generate_master_key())
     with pytest.raises(EncryptionError, match="Invalid plain-key regex"):
         core.encrypt_text("FOO=bar\n", key, plain_key_regex=["[invalid"])
+
+
+# --- get_value ---------------------------------------------------------------
+
+def test_get_value_symmetric_encrypted():
+    key_bytes = crypto.load_key_bytes(crypto.generate_master_key())
+    enc = core.encrypt_text("FOO=bar\nBAZ=qux\n", key_bytes)
+    assert core.get_value(enc, "FOO", key_bytes=key_bytes) == "bar"
+    assert core.get_value(enc, "BAZ", key_bytes=key_bytes) == "qux"
+
+
+def test_get_value_plain_key():
+    key_bytes = crypto.load_key_bytes(crypto.generate_master_key())
+    enc = core.encrypt_text("PUBLIC=open\nSECRET=shh\n", key_bytes, plain_keys=["PUBLIC"])
+    assert core.get_value(enc, "PUBLIC", key_bytes=key_bytes) == "open"
+
+
+def test_get_value_missing_key_raises():
+    from dotseal.exceptions import KeyNotFoundError
+    key_bytes = crypto.load_key_bytes(crypto.generate_master_key())
+    enc = core.encrypt_text("FOO=bar\n", key_bytes)
+    with pytest.raises(KeyNotFoundError):
+        core.get_value(enc, "MISSING", key_bytes=key_bytes)
+
+
+def test_get_value_last_wins_for_duplicates():
+    key_bytes = crypto.load_key_bytes(crypto.generate_master_key())
+    enc = core.encrypt_text("FOO=first\nFOO=second\n", key_bytes)
+    assert core.get_value(enc, "FOO", key_bytes=key_bytes) == "second"
+
+
+def test_get_value_asymmetric():
+    prv, pub = crypto.generate_recipient_keypair()
+    enc = core.encrypt_text_asymmetric("SECRET=hidden\n", [pub])
+    assert core.get_value(enc, "SECRET", private_key=prv) == "hidden"
+
+
+def test_get_value_missing_key_symmetric_requires_key_bytes():
+    from dotseal.exceptions import MasterKeyNotFoundError
+    key_bytes = crypto.load_key_bytes(crypto.generate_master_key())
+    enc = core.encrypt_text("FOO=bar\n", key_bytes)
+    with pytest.raises(MasterKeyNotFoundError):
+        core.get_value(enc, "FOO")
+
+
+def test_get_value_asymmetric_requires_private_key():
+    from dotseal.exceptions import PrivateKeyNotFoundError
+    _, pub = crypto.generate_recipient_keypair()
+    enc = core.encrypt_text_asymmetric("SECRET=hidden\n", [pub])
+    with pytest.raises(PrivateKeyNotFoundError):
+        core.get_value(enc, "SECRET")
+
+
+# --- set_value ---------------------------------------------------------------
+
+def test_set_value_only_target_ciphertext_changes():
+    key_bytes = crypto.load_key_bytes(crypto.generate_master_key())
+    enc = core.encrypt_text("KEEP=same\nCHANGE=old\n", key_bytes)
+    before = {e.key: e.value for e in parser.parse(enc).entries()}
+
+    enc2 = core.set_value(enc, "CHANGE", "new", key_bytes=key_bytes)
+    after = {e.key: e.value for e in parser.parse(enc2).entries()}
+
+    assert after["KEEP"] == before["KEEP"]
+    assert after["CHANGE"] != before["CHANGE"]
+    assert core.get_value(enc2, "CHANGE", key_bytes=key_bytes) == "new"
+
+
+def test_set_value_new_key_appended_and_encrypted():
+    key_bytes = crypto.load_key_bytes(crypto.generate_master_key())
+    enc = core.encrypt_text("EXISTING=val\n", key_bytes)
+
+    enc2 = core.set_value(enc, "NEW_KEY", "secret", key_bytes=key_bytes)
+    entries = {e.key: e.value for e in parser.parse(enc2).entries()}
+    assert "NEW_KEY" in entries
+    assert crypto.is_encrypted_value(entries["NEW_KEY"])
+    assert core.get_value(enc2, "NEW_KEY", key_bytes=key_bytes) == "secret"
+
+
+def test_set_value_get_roundtrip():
+    key_bytes = crypto.load_key_bytes(crypto.generate_master_key())
+    enc = core.encrypt_text("FOO=original\n", key_bytes)
+    enc2 = core.set_value(enc, "FOO", "updated", key_bytes=key_bytes)
+    assert core.get_value(enc2, "FOO", key_bytes=key_bytes) == "updated"
+
+
+def test_set_value_plain_policy_key_stays_cleartext():
+    key_bytes = crypto.load_key_bytes(crypto.generate_master_key())
+    enc = core.encrypt_text("PUBLIC=old\nSECRET=shh\n", key_bytes, plain_keys=["PUBLIC"])
+
+    enc2 = core.set_value(enc, "PUBLIC", "new", key_bytes=key_bytes)
+    entries = {e.key: e.value for e in parser.parse(enc2).entries()}
+    assert not crypto.is_encrypted_value(entries["PUBLIC"])
+    assert core.get_value(enc2, "PUBLIC", key_bytes=key_bytes) == "new"
+
+
+def test_set_value_asymmetric_one_recipient():
+    prv, pub = crypto.generate_recipient_keypair()
+    enc = core.encrypt_text_asymmetric("TOKEN=old\n", [pub])
+    enc2 = core.set_value(enc, "TOKEN", "new", private_key=prv)
+    assert core.get_value(enc2, "TOKEN", private_key=prv) == "new"
+    assert core.file_mode(enc2) == "asymmetric"
+    assert len(core.parse_recipients(parser.parse(enc2))) == 1
+
+
+def test_set_value_preserves_comments_and_order():
+    key_bytes = crypto.load_key_bytes(crypto.generate_master_key())
+    env_text = "# header\nFOO=foo\n# mid\nBAR=bar\n"
+    enc = core.encrypt_text(env_text, key_bytes)
+    enc2 = core.set_value(enc, "FOO", "updated", key_bytes=key_bytes)
+    assert "# header" in enc2
+    assert "# mid" in enc2
+    assert core.get_value(enc2, "FOO", key_bytes=key_bytes) == "updated"
+    assert core.get_value(enc2, "BAR", key_bytes=key_bytes) == "bar"
+
+
+def test_set_value_value_with_special_chars():
+    key_bytes = crypto.load_key_bytes(crypto.generate_master_key())
+    enc = core.encrypt_text("PWD=old\n", key_bytes)
+    complex_val = "!!@#$%=keep=this"
+    enc2 = core.set_value(enc, "PWD", complex_val, key_bytes=key_bytes)
+    assert core.get_value(enc2, "PWD", key_bytes=key_bytes) == complex_val
+
+
+def test_set_value_asymmetric_requires_private_key():
+    from dotseal.exceptions import PrivateKeyNotFoundError
+    _, pub = crypto.generate_recipient_keypair()
+    enc = core.encrypt_text_asymmetric("TOKEN=old\n", [pub])
+    with pytest.raises(PrivateKeyNotFoundError):
+        core.set_value(enc, "TOKEN", "new")
+
+
+def test_set_value_symmetric_requires_key_bytes():
+    from dotseal.exceptions import MasterKeyNotFoundError
+    key_bytes = crypto.load_key_bytes(crypto.generate_master_key())
+    enc = core.encrypt_text("FOO=bar\n", key_bytes)
+    with pytest.raises(MasterKeyNotFoundError):
+        core.set_value(enc, "FOO", "new")
