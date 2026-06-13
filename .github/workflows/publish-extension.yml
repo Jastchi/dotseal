@@ -20,6 +20,13 @@ jobs:
       with:
         node-version: 22
 
+    - name: Bump version in package.json
+      working-directory: editors/vscode
+      run: |
+        VERSION="${{ github.ref_name }}"
+        VERSION="${VERSION#ext-v}"
+        npm version "$VERSION" --no-git-tag-version
+
     - name: Install dependencies
       working-directory: editors/vscode
       run: npm ci
@@ -40,3 +47,13 @@ jobs:
       run: gh release upload ${{ github.ref_name }} *.vsix
       env:
         GH_TOKEN: ${{ github.token }}
+
+    - name: Commit version bump
+      run: |
+        VERSION="${{ github.ref_name }}"
+        VERSION="${VERSION#ext-v}"
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+        git add editors/vscode/package.json editors/vscode/package-lock.json
+        git commit -m "chore: bump VS Code extension version to $VERSION"
+        git push origin HEAD:main
