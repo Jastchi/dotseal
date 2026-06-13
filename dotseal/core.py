@@ -23,6 +23,7 @@ from .exceptions import (
     DecryptionError,
     EncryptionError,
     KeyFingerprintMismatchError,
+    KeyNotFoundError,
     MasterKeyNotFoundError,
     PrivateKeyNotFoundError,
     RecipientNotFoundError,
@@ -915,6 +916,104 @@ def remove_recipient_from_text(text: str, identifier: str) -> str:
         plain_keys=plain_keys,
         plain_key_regex=plain_key_regex,
     )
+
+
+# --- Single-key operations --------------------------------------------------
+
+def get_value(
+    text: str,
+    key: str,
+    *,
+    key_bytes: Optional[bytes] = None,
+    private_key: Optional[str] = None,
+) -> str:
+    """Return the value of one variable; raise :exc:`KeyNotFoundError` if absent.
+
+    The last occurrence wins when a key appears more than once (consistent with
+    how most dotenv libraries and shells handle duplicates).
+    """
+    parsed = parser.parse(text)
+    if _is_asymmetric(parsed):
+        if private_key is None:
+            raise PrivateKeyNotFoundError(
+                "Private key required to read an asymmetric file."
+            )
+        dek = recover_data_key(parsed, private_key)
+
+        def _decrypt(token: str, name: str) -> str:
+            return crypto.decrypt_value(dek, token, aad=name)
+    else:
+        if key_bytes is None:
+            raise MasterKeyNotFoundError(
+                "Master key required to read a symmetric file."
+            )
+        verify_key(parsed, key_bytes)
+
+        assert key_bytes is not None
+        def _decrypt(token: str, name: str) -> str:
+            return crypto.decrypt_value(key_bytes, token, aad=name)
+
+    found: Optional[str] = None
+    for record in parsed.records:
+        if record.kind == "entry" and record.key == key:
+            found = _decrypt(record.value, record.key) if crypto.is_encrypted_value(record.value) else record.value
+
+    if found is None:
+        raise KeyNotFoundError(f"Key not found: {key!r}")
+    return found
+
+
+def set_value(
+    text: str,
+    key: str,
+    value: str,
+    *,
+    key_bytes: Optional[bytes] = None,
+    private_key: Optional[str] = None,
+) -> str:
+    """Return updated .env.enc text with one key added or replaced.
+
+    Algorithm: decrypt → patch the cleartext in-place → reencrypt.
+    ``reencrypt_text`` / ``reencrypt_text_asymmetric`` reuse unchanged
+    ciphertexts, so only the modified key's line changes in git diffs.
+    The file's plaintext policy (plain_keys / plain_re) is honoured
+    automatically because it is read from the original file's metadata
+    inside ``reencrypt_text``.
+    """
+    parsed_original = parser.parse(text)
+    is_asym = _is_asymmetric(parsed_original)
+
+    if is_asym:
+        if private_key is None:
+            raise PrivateKeyNotFoundError(
+                "Private key required to modify an asymmetric file."
+            )
+        cleartext = decrypt_text_asymmetric(text, private_key)
+    else:
+        if key_bytes is None:
+            raise MasterKeyNotFoundError(
+                "Master key required to modify a symmetric file."
+            )
+        cleartext = decrypt_text(text, key_bytes)
+
+    parsed = parser.parse(cleartext)
+    formatted = parser.format_value(value)
+    found = False
+    for record in parsed.records:
+        if record.kind == "entry" and record.key == key:
+            record.value = formatted
+            found = True
+            break
+    if not found:
+        parsed.records.append(parser.Record(kind="entry", key=key, value=formatted))
+
+    updated_cleartext = parser.serialize(parsed)
+
+    if is_asym:
+        assert private_key is not None
+        return reencrypt_text_asymmetric(updated_cleartext, private_key, text)
+    assert key_bytes is not None
+    return reencrypt_text(updated_cleartext, key_bytes, text)
 
 
 # --- Filesystem helpers -----------------------------------------------------

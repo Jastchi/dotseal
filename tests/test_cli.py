@@ -526,3 +526,130 @@ def test_edit_reopens_editor_after_reencrypt_failure(project, monkeypatch, capsy
     assert entries["DEBUG"] == "False"
     leftovers = [p for p in os.listdir(project) if p.startswith(".dotseal-edit-")]
     assert leftovers == []
+
+
+# --- get command -------------------------------------------------------------
+
+def test_get_existing_key(project, capsys):
+    (project / ".env").write_text("FOO=secretval\n")
+    assert main(["init"]) == 0
+    assert main(["encrypt"]) == 0
+    capsys.readouterr()
+    assert main(["get", "FOO"]) == 0
+    assert capsys.readouterr().out == "secretval"
+
+
+def test_get_missing_key_returns_1(project, capsys):
+    (project / ".env").write_text("FOO=bar\n")
+    assert main(["init"]) == 0
+    assert main(["encrypt"]) == 0
+    capsys.readouterr()
+    assert main(["get", "MISSING"]) == 1
+    assert "error" in capsys.readouterr().err.lower()
+
+
+def test_get_missing_key_with_default(project, capsys):
+    (project / ".env").write_text("FOO=bar\n")
+    assert main(["init"]) == 0
+    assert main(["encrypt"]) == 0
+    capsys.readouterr()
+    assert main(["get", "MISSING", "--default", "fallback"]) == 0
+    assert capsys.readouterr().out == "fallback"
+
+
+def test_get_no_trailing_newline(project, capsys):
+    (project / ".env").write_text("KEY=value\n")
+    assert main(["init"]) == 0
+    assert main(["encrypt"]) == 0
+    capsys.readouterr()
+    assert main(["get", "KEY"]) == 0
+    assert capsys.readouterr().out == "value"
+
+
+def test_get_plain_key(project, capsys):
+    (project / ".env").write_text("PUBLIC=visible\nSECRET=shh\n")
+    assert main(["init"]) == 0
+    assert main(["encrypt", "--plain-key", "PUBLIC"]) == 0
+    capsys.readouterr()
+    assert main(["get", "PUBLIC"]) == 0
+    assert capsys.readouterr().out == "visible"
+
+
+def test_get_asymmetric(project, capsys):
+    prv, pub = crypto.generate_recipient_keypair()
+    (project / ".env").write_text("TOKEN=mysecret\n")
+    assert main(["encrypt", "-r", pub]) == 0
+    prv_file = project / core.PRIVATE_KEY_FILE_NAME
+    prv_file.write_text(prv + "\n")
+    capsys.readouterr()
+    assert main(["get", "TOKEN"]) == 0
+    assert capsys.readouterr().out == "mysecret"
+
+
+# --- set command -------------------------------------------------------------
+
+def test_set_changes_existing_value(project, capsys):
+    from dotseal import parser as _parser
+    (project / ".env").write_text("FOO=old\n")
+    assert main(["init"]) == 0
+    assert main(["encrypt"]) == 0
+    assert main(["set", "FOO=new"]) == 0
+    assert main(["decrypt", ".env.enc", "out.env"]) == 0
+    entries = {e.key: e.value for e in _parser.parse((project / "out.env").read_text()).entries()}
+    assert entries["FOO"] == "new"
+
+
+def test_set_adds_new_key(project, capsys):
+    (project / ".env").write_text("EXISTING=val\n")
+    assert main(["init"]) == 0
+    assert main(["encrypt"]) == 0
+    assert main(["set", "NEW_KEY=myvalue"]) == 0
+    capsys.readouterr()
+    assert main(["get", "NEW_KEY"]) == 0
+    assert capsys.readouterr().out == "myvalue"
+
+
+def test_set_unchanged_ciphertext_preserved(project):
+    from dotseal import parser as _parser
+    (project / ".env").write_text("KEEP=same\nCHANGE=old\n")
+    assert main(["init"]) == 0
+    assert main(["encrypt"]) == 0
+    before = {e.key: e.value for e in _parser.parse((project / ".env.enc").read_text()).entries()}
+    assert main(["set", "CHANGE=new"]) == 0
+    after = {e.key: e.value for e in _parser.parse((project / ".env.enc").read_text()).entries()}
+    assert after["KEEP"] == before["KEEP"]
+    assert after["CHANGE"] != before["CHANGE"]
+
+
+def test_set_invalid_key_name(project, capsys):
+    (project / ".env").write_text("FOO=bar\n")
+    assert main(["init"]) == 0
+    assert main(["encrypt"]) == 0
+    assert main(["set", "123INVALID=val"]) == 1
+    assert "error" in capsys.readouterr().err.lower()
+
+
+def test_set_missing_equals(project, capsys):
+    (project / ".env").write_text("FOO=bar\n")
+    assert main(["init"]) == 0
+    assert main(["encrypt"]) == 0
+    assert main(["set", "NOEQUALSSIGN"]) == 1
+    assert "error" in capsys.readouterr().err.lower()
+
+
+def test_set_on_missing_file(project, capsys):
+    assert main(["init"]) == 0
+    assert main(["set", "FOO=bar", "nonexistent.env.enc"]) == 1
+    assert "error" in capsys.readouterr().err.lower()
+
+
+def test_set_asymmetric(project):
+    prv, pub = crypto.generate_recipient_keypair()
+    (project / ".env").write_text("TOKEN=old\n")
+    assert main(["encrypt", "-r", pub]) == 0
+    prv_file = project / core.PRIVATE_KEY_FILE_NAME
+    prv_file.write_text(prv + "\n")
+    assert main(["set", "TOKEN=new"]) == 0
+    enc = (project / ".env.enc").read_text()
+    assert core.file_mode(enc) == "asymmetric"
+    assert core.get_value(enc, "TOKEN", private_key=prv) == "new"

@@ -15,6 +15,7 @@ from __future__ import annotations
 import argparse
 import fnmatch
 import os
+import re
 import shlex
 import subprocess
 import sys
@@ -22,7 +23,9 @@ import tempfile
 from typing import List, Optional
 
 from . import __version__, core, crypto, parser
-from .exceptions import DotsealError
+from .exceptions import DotsealError, KeyNotFoundError
+
+_KEY_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_.]*$")
 
 _GITIGNORE_NOTE = "# Added by `dotseal init` -- never commit your master key"
 
@@ -472,6 +475,46 @@ def cmd_rm_recipient(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_get(args: argparse.Namespace) -> int:
+    text = _read(args.file)
+    search_dir = os.path.dirname(os.path.abspath(args.file))
+    try:
+        if core.file_mode(text) == "asymmetric":
+            private_key = _resolve_private_key(args, search_dir=search_dir)
+            value = core.get_value(text, args.variable, private_key=private_key)
+        else:
+            key_bytes = _resolve_key_bytes(args, search_dir=search_dir)
+            value = core.get_value(text, args.variable, key_bytes=key_bytes)
+    except KeyNotFoundError:
+        if args.default is not None:
+            sys.stdout.write(args.default)
+            return 0
+        raise
+    sys.stdout.write(value)
+    return 0
+
+
+def cmd_set(args: argparse.Namespace) -> int:
+    if "=" not in args.assignment:
+        _err("set: argument must be in KEY=VALUE form")
+        return 1
+    key, _, value = args.assignment.partition("=")
+    if not _KEY_RE.match(key):
+        _err(f"set: {key!r} is not a valid variable name (must match [A-Za-z_][A-Za-z0-9_.]*)")
+        return 1
+    text = _read(args.file)
+    search_dir = os.path.dirname(os.path.abspath(args.file))
+    if core.file_mode(text) == "asymmetric":
+        private_key = _resolve_private_key(args, search_dir=search_dir)
+        out = core.set_value(text, key, value, private_key=private_key)
+    else:
+        key_bytes = _resolve_key_bytes(args, search_dir=search_dir)
+        out = core.set_value(text, key, value, key_bytes=key_bytes)
+    with open(args.file, "w", encoding="utf-8") as fh:
+        fh.write(out)
+    return 0
+
+
 # --- argument parsing -------------------------------------------------------
 
 def build_parser() -> argparse.ArgumentParser:
@@ -556,6 +599,30 @@ def build_parser() -> argparse.ArgumentParser:
     add_key_args(p_dec)
     add_private_key_args(p_dec)
     p_dec.set_defaults(func=cmd_decrypt)
+
+    p_get = sub.add_parser("get", help="Read one variable's value from an encrypted file.")
+    p_get.add_argument("variable", metavar="KEY", help="Variable name to retrieve.")
+    p_get.add_argument("file", nargs="?", default=".env.enc", metavar="FILE")
+    p_get.add_argument(
+        "--default",
+        metavar="VAL",
+        default=None,
+        help="Value to emit (and exit 0) when the key is absent.",
+    )
+    add_key_args(p_get)
+    add_private_key_args(p_get)
+    p_get.set_defaults(func=cmd_get)
+
+    p_set = sub.add_parser("set", help="Add or replace one variable in an encrypted file.")
+    p_set.add_argument(
+        "assignment",
+        metavar="KEY=VALUE",
+        help="Assignment in KEY=VALUE form (shell quoting applies).",
+    )
+    p_set.add_argument("file", nargs="?", default=".env.enc", metavar="FILE")
+    add_key_args(p_set)
+    add_private_key_args(p_set)
+    p_set.set_defaults(func=cmd_set)
 
     p_edit = sub.add_parser("edit", help="Decrypt, open $EDITOR, then re-encrypt (sops-style).")
     p_edit.add_argument("input", nargs="?", default=".env.enc")
