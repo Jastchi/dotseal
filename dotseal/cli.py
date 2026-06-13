@@ -16,7 +16,6 @@ from __future__ import annotations
 import argparse
 import fnmatch
 import os
-import re
 import shlex
 import subprocess
 import sys
@@ -25,8 +24,6 @@ from typing import List, Optional
 
 from . import __version__, core, crypto, parser
 from .exceptions import DotsealError, KeyNotFoundError
-
-_KEY_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*\Z")
 
 _GITIGNORE_NOTE = "# Added by `dotseal init` -- never commit your master key"
 
@@ -61,14 +58,7 @@ def _warn_plain_keys_already_encrypted(
     """
     if not plain_keys:
         return
-    parsed = parser.parse(text)
-    already_enc = sorted(
-        k for k in plain_keys
-        if any(
-            r.kind == "entry" and r.key == k and crypto.is_encrypted_value(r.value)
-            for r in parsed.records
-        )
-    )
+    already_enc = core.already_encrypted_keys(text, plain_keys)
     if already_enc:
         _warn(
             "--plain-key has no effect on already-encrypted values: "
@@ -554,7 +544,7 @@ def cmd_set(args: argparse.Namespace) -> int:
         _err("set: argument must be in KEY=VALUE form")
         return 1
     key, _, value = args.assignment.partition("=")
-    if not _KEY_RE.match(key):
+    if not core.VALID_KEY_RE.match(key):
         _err(f"set: {key!r} is not a valid variable name (must match [A-Za-z_][A-Za-z0-9_]*)")
         return 1
     text = _read(args.file)
