@@ -25,7 +25,7 @@ from typing import List, Optional
 from . import __version__, core, crypto, parser
 from .exceptions import DotsealError, KeyNotFoundError
 
-_KEY_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_.]*\Z")
+_KEY_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*\Z")
 
 _GITIGNORE_NOTE = "# Added by `dotseal init` -- never commit your master key"
 
