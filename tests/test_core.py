@@ -926,6 +926,14 @@ def test_get_value_missing_key_symmetric_requires_key_bytes():
         core.get_value(enc, "FOO")
 
 
+def test_get_value_asymmetric_requires_private_key():
+    from dotseal.exceptions import PrivateKeyNotFoundError
+    _, pub = crypto.generate_recipient_keypair()
+    enc = core.encrypt_text_asymmetric("SECRET=hidden\n", [pub])
+    with pytest.raises(PrivateKeyNotFoundError):
+        core.get_value(enc, "SECRET")
+
+
 # --- set_value ---------------------------------------------------------------
 
 def test_set_value_only_target_ciphertext_changes():
@@ -995,3 +1003,19 @@ def test_set_value_value_with_special_chars():
     complex_val = "!!@#$%=keep=this"
     enc2 = core.set_value(enc, "PWD", complex_val, key_bytes=key_bytes)
     assert core.get_value(enc2, "PWD", key_bytes=key_bytes) == complex_val
+
+
+def test_set_value_asymmetric_requires_private_key():
+    from dotseal.exceptions import PrivateKeyNotFoundError
+    _, pub = crypto.generate_recipient_keypair()
+    enc = core.encrypt_text_asymmetric("TOKEN=old\n", [pub])
+    with pytest.raises(PrivateKeyNotFoundError):
+        core.set_value(enc, "TOKEN", "new")
+
+
+def test_set_value_symmetric_requires_key_bytes():
+    from dotseal.exceptions import MasterKeyNotFoundError
+    key_bytes = crypto.load_key_bytes(crypto.generate_master_key())
+    enc = core.encrypt_text("FOO=bar\n", key_bytes)
+    with pytest.raises(MasterKeyNotFoundError):
+        core.set_value(enc, "FOO", "new")
