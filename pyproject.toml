@@ -37,6 +37,7 @@ dependencies = [
 [project.urls]
 Homepage = "https://github.com/Jastchi/dotseal"
 Repository = "https://github.com/Jastchi/dotseal"
+Changelog = "https://github.com/Jastchi/dotseal/releases"
 
 [project.optional-dependencies]
 dev = [
