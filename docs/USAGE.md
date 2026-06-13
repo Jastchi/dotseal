@@ -64,6 +64,26 @@ Key options:
 - Asymmetric: `--private-key`, `--private-key-file`
 - Selective encryption: `--plain-key KEY` (repeatable), `--plain-key-regex REGEX` (repeatable; full key match)
 
+### Selective encryption policy
+
+`--plain-key` and `--plain-key-regex` control which variable names stay plaintext in
+the encrypted file. The chosen policy is recorded in the file footer (`plain_keys=…`,
+`plain_regex=…`).
+
+**Re-running `encrypt` on an already encrypted file is idempotent:** existing
+`ENC[…]` values are left unchanged. Only new cleartext values are encrypted according
+to the current policy. The footer metadata is always rewritten, so it may describe a
+policy that does not match values that were encrypted in a previous run.
+
+| Goal | Command |
+| --- | --- |
+| Encrypt new cleartext keys under an updated policy | `dotseal encrypt` (on `.env` or a partially encrypted file) |
+| Make a previously **plaintext** key encrypted | `dotseal encrypt --plain-key …` or `dotseal edit --plain-key …` |
+| Make a previously **encrypted** key plaintext | `dotseal decrypt`, edit `.env`, then `dotseal encrypt --plain-key …`, **or** `dotseal edit --plain-key …` |
+
+`dotseal edit` decrypts to a temp file, applies the policy on save, and can both seal
+and unseal keys. Re-running `encrypt` alone cannot downgrade `ENC[…]` back to plain.
+
 ## See also
 
 - [Key Management](KEY_MANAGEMENT.md)
