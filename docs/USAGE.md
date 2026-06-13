@@ -136,7 +136,8 @@ Omit both flags to encrypt every value. On re-encrypt, omitting them preserves t
 
 `--plain-key` and `--plain-key-regex` control which variable names stay plaintext in
 the encrypted file. The chosen policy is recorded in the file footer (`plain_keys=…`,
-`plain_re=…`). See [File Format](FILE_FORMAT.md) for token syntax.
+`plain_re=…`). See [File Format](FILE_FORMAT.md) for token syntax. Names containing
+a comma cannot appear in `plain_keys`; use `--plain-key-regex` for those keys.
 
 Example committed file:
 

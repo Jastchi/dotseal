@@ -32,6 +32,8 @@ Prefer `DOTSEAL_MASTER_KEY` or `.dotseal.key` over storing key material in edito
 - `dotseal.plaintextKeys`: exact variable names to keep unencrypted when the extension creates a new encrypted file.
 - `dotseal.plaintextKeyRegex`: regex patterns; keys that fully match any pattern are kept unencrypted when the extension creates a new encrypted file.
 
+These settings apply only when the encrypted file is **created** (first save of a new `.env.enc`). After that, the policy stored in the file footer is reused on every save; changing settings does not update an existing file. To apply a new policy, recreate the file or use the CLI (`dotseal encrypt --plain-key …`, `dotseal edit --plain-key …`).
+
 ## Security Notes
 
 Cleartext is not written to a `.env` file or temporary file by this extension. It lives in the VS Code/Cursor editor buffer and extension process memory while the virtual document is open.

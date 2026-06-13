@@ -614,6 +614,155 @@ def test_reencrypt_text_asymmetric_reuses_unchanged_ciphertexts():
     }
 
 
+# --- asymmetric plain-key policy ---------------------------------------------
+
+def test_encrypt_text_asymmetric_respects_plain_key_policy():
+    _, pub = crypto.generate_recipient_keypair()
+    enc = core.encrypt_text_asymmetric(
+        "PUBLIC=ok\nSECRET=shh\n",
+        [pub],
+        plain_keys=["PUBLIC"],
+    )
+    entries = {e.key: e.value for e in parser.parse(enc).entries()}
+    meta = core.parse_metadata(parser.parse(enc))
+    assert entries["PUBLIC"] == "ok"
+    assert entries["SECRET"].startswith("ENC[")
+    assert meta.get(core.PLAINTEXT_KEYS_TOKEN) == "PUBLIC"
+
+
+def test_encrypt_text_asymmetric_respects_plain_key_regex_policy():
+    _, pub = crypto.generate_recipient_keypair()
+    enc = core.encrypt_text_asymmetric(
+        "PUBLIC_A=one\nPUBLIC_B=two\nSECRET=three\n",
+        [pub],
+        plain_key_regex=[r"PUBLIC_.+"],
+    )
+    entries = {e.key: e.value for e in parser.parse(enc).entries()}
+    assert entries["PUBLIC_A"] == "one"
+    assert entries["PUBLIC_B"] == "two"
+    assert entries["SECRET"].startswith("ENC[")
+
+
+def test_reencrypt_text_asymmetric_preserves_metadata_policy_by_default():
+    priv, pub = crypto.generate_recipient_keypair()
+    original = core.encrypt_text_asymmetric(
+        "PUBLIC=old\nSECRET=old\n",
+        [pub],
+        plain_keys=["PUBLIC"],
+    )
+    updated = core.reencrypt_text_asymmetric(
+        "PUBLIC=new\nSECRET=new\n",
+        priv,
+        original,
+    )
+    entries = {e.key: e.value for e in parser.parse(updated).entries()}
+    meta = core.parse_metadata(parser.parse(updated))
+    assert entries["PUBLIC"] == "new"
+    assert entries["SECRET"].startswith("ENC[")
+    assert meta.get(core.PLAINTEXT_KEYS_TOKEN) == "PUBLIC"
+
+
+def test_reencrypt_text_asymmetric_partial_plain_key_override_merges_regex():
+    priv, pub = crypto.generate_recipient_keypair()
+    original = core.encrypt_text_asymmetric(
+        "FOO=old\nPUBLIC_EXTRA=old\nSECRET=old\n",
+        [pub],
+        plain_keys=["FOO"],
+        plain_key_regex=[r"PUBLIC_.+"],
+    )
+    updated = core.reencrypt_text_asymmetric(
+        "FOO=still\nPUBLIC_EXTRA=still\nSECRET=still\n",
+        priv,
+        original,
+        plain_keys=["BAR"],
+    )
+    entries = {e.key: e.value for e in parser.parse(updated).entries()}
+    meta = core.parse_metadata(parser.parse(updated))
+    assert meta.get(core.PLAINTEXT_REGEX_TOKEN)
+    assert meta.get(core.PLAINTEXT_KEYS_TOKEN) == "BAR"
+    assert entries["FOO"].startswith("ENC[")
+    assert entries["PUBLIC_EXTRA"] == "still"
+    assert entries["SECRET"].startswith("ENC[")
+
+
+def test_reencrypt_text_asymmetric_seals_removed_plain_key():
+    priv, pub = crypto.generate_recipient_keypair()
+    original = core.encrypt_text_asymmetric(
+        "FOO=old\nSECRET=old\n",
+        [pub],
+        plain_keys=["FOO"],
+    )
+    updated = core.reencrypt_text_asymmetric(
+        "FOO=new\nSECRET=new\n",
+        priv,
+        original,
+        plain_keys=[],
+    )
+    entries = {e.key: e.value for e in parser.parse(updated).entries()}
+    meta = core.parse_metadata(parser.parse(updated))
+    assert core.PLAINTEXT_KEYS_TOKEN not in meta
+    assert entries["FOO"].startswith("ENC[")
+    assert entries["SECRET"].startswith("ENC[")
+
+
+def test_reencrypt_text_asymmetric_unseals_added_plain_key():
+    priv, pub = crypto.generate_recipient_keypair()
+    original = core.encrypt_text_asymmetric("SECRET=old\n", [pub])
+    updated = core.reencrypt_text_asymmetric(
+        "SECRET=newplain\n",
+        priv,
+        original,
+        plain_keys=["SECRET"],
+    )
+    entries = {e.key: e.value for e in parser.parse(updated).entries()}
+    meta = core.parse_metadata(parser.parse(updated))
+    assert meta.get(core.PLAINTEXT_KEYS_TOKEN) == "SECRET"
+    assert entries["SECRET"] == "newplain"
+
+
+# --- encrypt idempotency / partial-override footguns -------------------------
+
+def test_encrypt_text_idempotent_expanding_plain_key_set_keeps_sealed_values():
+    key = crypto.load_key_bytes(crypto.generate_master_key())
+    enc = core.encrypt_text("SECRET=shh\n", key)
+    enc2 = core.encrypt_text(enc, key, plain_keys=["SECRET"])
+    entries = {e.key: e.value for e in parser.parse(enc2).entries()}
+    meta = core.parse_metadata(parser.parse(enc2))
+    assert meta.get(core.PLAINTEXT_KEYS_TOKEN) == "SECRET"
+    assert entries["SECRET"].startswith("ENC[")
+    assert core.decrypt_to_dict(enc2, key) == {"SECRET": "shh"}
+
+
+def test_encrypt_text_partial_override_rewrites_footer_without_unsealing():
+    key = crypto.load_key_bytes(crypto.generate_master_key())
+    enc = core.encrypt_text("SECRET=shh\nPUBLIC=ok\n", key)
+    enc2 = core.encrypt_text(enc, key, plain_keys=["SECRET", "PUBLIC"])
+    entries = {e.key: e.value for e in parser.parse(enc2).entries()}
+    meta = core.parse_metadata(parser.parse(enc2))
+    assert meta.get(core.PLAINTEXT_KEYS_TOKEN) == "PUBLIC,SECRET"
+    assert entries["SECRET"].startswith("ENC[")
+    assert entries["PUBLIC"].startswith("ENC[")
+    assert core.decrypt_to_dict(enc2, key) == {"SECRET": "shh", "PUBLIC": "ok"}
+
+
+def test_encrypt_text_partial_plain_key_override_merges_regex_on_rerun():
+    key = crypto.load_key_bytes(crypto.generate_master_key())
+    enc = core.encrypt_text(
+        "FOO=old\nPUBLIC_EXTRA=old\nSECRET=old\n",
+        key,
+        plain_keys=["FOO"],
+        plain_key_regex=[r"PUBLIC_.+"],
+    )
+    enc2 = core.encrypt_text(enc, key, plain_keys=["BAR"])
+    entries = {e.key: e.value for e in parser.parse(enc2).entries()}
+    meta = core.parse_metadata(parser.parse(enc2))
+    assert meta.get(core.PLAINTEXT_REGEX_TOKEN)
+    assert meta.get(core.PLAINTEXT_KEYS_TOKEN) == "BAR"
+    assert entries["FOO"].startswith("ENC[")
+    assert entries["PUBLIC_EXTRA"] == "old"
+    assert entries["SECRET"].startswith("ENC[")
+
+
 # --- write_secret_file hardening -----------------------------------------------
 
 def test_write_secret_file_replaces_loose_permissions(tmp_path):

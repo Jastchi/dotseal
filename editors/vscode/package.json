@@ -64,7 +64,7 @@
             "type": "string"
           },
           "default": [],
-          "description": "Optional exact variable names to keep unencrypted when creating a new encrypted env file from the virtual editor."
+          "description": "Exact variable names to keep unencrypted when the virtual editor creates a new encrypted env file (first save only). Existing files keep the policy stored in their footer; use the CLI to change policy later."
         },
         "dotseal.plaintextKeyRegex": {
           "type": "array",
@@ -72,7 +72,7 @@
             "type": "string"
           },
           "default": [],
-          "description": "Optional regex patterns. Any key that fully matches one pattern is kept unencrypted when creating a new encrypted env file from the virtual editor."
+          "description": "Regex patterns; keys that fully match are kept unencrypted when the virtual editor creates a new encrypted env file (first save only). Existing files keep the policy stored in their footer; use the CLI to change policy later."
         }
       }
     }

@@ -35,6 +35,8 @@ SECRET=ENC[AES_GCM,data:Zm9vYmFy...]
 | `plain_keys` | Comma-separated variable names stored unencrypted. Names are sorted alphabetically when written. |
 | `plain_re` | Comma-separated list of regex patterns. Each pattern is stored as **base64url** (UTF-8 pattern bytes). A key is plaintext when any pattern `fullmatch`es its name. |
 
+Variable names containing a comma cannot be listed in `plain_keys` (the comma is the delimiter). Use `plain_re` for such names instead.
+
 Rules:
 
 - A key is sealed unless it appears in `plain_keys` or matches any decoded `plain_re` pattern.
