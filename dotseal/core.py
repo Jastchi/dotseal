@@ -1015,6 +1015,77 @@ def set_value(
     return reencrypt_text(updated_cleartext, key_bytes, text)
 
 
+# --- Key rotation -----------------------------------------------------------
+
+def rotate_text(
+    text: str,
+    old_key_bytes: bytes,
+    new_key_bytes: bytes,
+) -> str:
+    """Re-encrypt a symmetric file under a new master key.
+
+    Decrypts with ``old_key_bytes`` then encrypts with ``new_key_bytes``,
+    generating fresh nonces and a new key fingerprint. The file's plaintext
+    policy (``plain_keys`` / ``plain_key_regex``) is preserved automatically.
+
+    Raises:
+        EncryptionError: if the file is asymmetric, or old and new keys are identical.
+        KeyFingerprintMismatchError: if ``old_key_bytes`` does not match the file.
+    """
+    if old_key_bytes == new_key_bytes:
+        raise EncryptionError("Old and new keys are identical. No rotation needed.")
+    parsed = parser.parse(text)
+    if _is_asymmetric(parsed):
+        raise EncryptionError(
+            "This file is encrypted in asymmetric (multi-recipient) mode. "
+            "Use rotate_text_asymmetric with recipient public keys instead."
+        )
+    plain_keys, plain_key_regex = parse_plaintext_policy(parse_metadata(parsed))
+    cleartext = decrypt_text(text, old_key_bytes)
+    return encrypt_text(
+        cleartext,
+        new_key_bytes,
+        plain_keys=sorted(plain_keys),
+        plain_key_regex=plain_key_regex,
+    )
+
+
+def rotate_text_asymmetric(
+    text: str,
+    private_key: str,
+    recipient_public_keys: List[str],
+) -> str:
+    """Re-encrypt an asymmetric file with a fresh DEK for a new recipient set.
+
+    Decrypts with ``private_key`` (must be a current recipient), generates a
+    fresh data key, re-encrypts all values, and wraps the new DEK for each key
+    in ``recipient_public_keys``. The file's plaintext policy is preserved.
+
+    This is the correct way to fully revoke a removed recipient: after
+    ``remove_recipient_from_text``, call this with the remaining public keys.
+
+    Raises:
+        EncryptionError: if the file is not asymmetric, or no recipients given.
+        RecipientNotFoundError: if ``private_key`` is not a current recipient.
+    """
+    parsed = parser.parse(text)
+    if not _is_asymmetric(parsed):
+        raise EncryptionError(
+            "This file is not in asymmetric mode. "
+            "Use rotate_text with old and new key bytes instead."
+        )
+    if not recipient_public_keys:
+        raise EncryptionError("At least one recipient public key is required.")
+    plain_keys, plain_key_regex = parse_plaintext_policy(parse_metadata(parsed))
+    cleartext = decrypt_text_asymmetric(text, private_key)
+    return encrypt_text_asymmetric(
+        cleartext,
+        recipient_public_keys,
+        plain_keys=sorted(plain_keys),
+        plain_key_regex=plain_key_regex,
+    )
+
+
 # --- Filesystem helpers -----------------------------------------------------
 
 def write_secret_file(path: str, text: str, *, mode: int = 0o600) -> None:

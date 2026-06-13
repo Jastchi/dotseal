@@ -396,6 +396,20 @@ export function decryptText(text: string, keyBytes: Buffer): string {
   return serialize(parsed);
 }
 
+export function rotateText(text: string, oldKeyBytes: Buffer, newKeyBytes: Buffer): string {
+  if (oldKeyBytes.equals(newKeyBytes)) {
+    throw new EncryptionError("Old and new keys are identical. No rotation needed.");
+  }
+  const parsed = parse(text);
+  assertNotAsymmetric(parsed);
+  const { plainKeys, plainKeyRegex } = parsePlaintextPolicy(parseMetadata(parsed));
+  const cleartext = decryptText(text, oldKeyBytes);
+  return encryptText(cleartext, newKeyBytes, {
+    plainKeys: Array.from(plainKeys),
+    plainKeyRegex
+  });
+}
+
 export function decryptToObject(text: string, keyBytes: Buffer): Record<string, string> {
   const parsed = parse(text);
   assertNotAsymmetric(parsed);

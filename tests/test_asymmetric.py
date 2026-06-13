@@ -298,3 +298,153 @@ def test_cli_edit_preserves_recipients(project, monkeypatch):
     entries = {e.key: e.value for e in parser.parse((project / "out.env").read_text()).entries()}
     assert entries["DEBUG"] == "False"
     assert entries["NEW_KEY"] == "new_value"
+
+
+# --- rotate_text_asymmetric --------------------------------------------------
+
+def test_rotate_text_asymmetric_round_trips_values():
+    prv, pub = crypto.generate_recipient_keypair()
+    enc = core.encrypt_text_asymmetric("FOO=bar\nBAZ=qux\n", [pub])
+    rotated = core.rotate_text_asymmetric(enc, prv, [pub])
+    assert core.decrypt_text_asymmetric(rotated, prv) == "FOO=bar\nBAZ=qux\n"
+
+
+def test_rotate_text_asymmetric_generates_fresh_dek():
+    prv, pub = crypto.generate_recipient_keypair()
+    enc = core.encrypt_text_asymmetric("FOO=bar\n", [pub])
+    rotated = core.rotate_text_asymmetric(enc, prv, [pub])
+    old_slot = core.parse_recipients(parser.parse(enc))[0]
+    new_slot = core.parse_recipients(parser.parse(rotated))[0]
+    # Fresh DEK means new ephemeral key and new wrapped ciphertext.
+    assert old_slot["ephem"] != new_slot["ephem"]
+    assert old_slot["enc"] != new_slot["enc"]
+
+
+def test_rotate_text_asymmetric_preserves_policy():
+    prv, pub = crypto.generate_recipient_keypair()
+    enc = core.encrypt_text_asymmetric("PUBLIC=ok\nSECRET=shh\n", [pub], plain_keys=["PUBLIC"])
+    rotated = core.rotate_text_asymmetric(enc, prv, [pub])
+    assert "PUBLIC=ok" in rotated
+    assert "plain_keys=PUBLIC" in rotated
+    assert core.decrypt_text_asymmetric(rotated, prv) == "PUBLIC=ok\nSECRET=shh\n"
+
+
+def test_rotate_text_asymmetric_changes_recipient_set():
+    alice_prv, alice_pub = crypto.generate_recipient_keypair()
+    bob_prv, bob_pub = crypto.generate_recipient_keypair()
+    enc = core.encrypt_text_asymmetric("SECRET=x\n", [alice_pub, bob_pub])
+    # Rotate to only Alice.
+    rotated = core.rotate_text_asymmetric(enc, alice_prv, [alice_pub])
+    assert len(core.parse_recipients(parser.parse(rotated))) == 1
+    assert core.decrypt_text_asymmetric(rotated, alice_prv) == "SECRET=x\n"
+    with pytest.raises(RecipientNotFoundError):
+        core.decrypt_text_asymmetric(rotated, bob_prv)
+
+
+def test_rotate_text_asymmetric_rejects_symmetric_file():
+    from dotseal.exceptions import EncryptionError
+    prv, pub = crypto.generate_recipient_keypair()
+    key = crypto.load_key_bytes(crypto.generate_master_key())
+    enc = core.encrypt_text("FOO=bar\n", key)
+    with pytest.raises(EncryptionError, match="not in asymmetric mode"):
+        core.rotate_text_asymmetric(enc, prv, [pub])
+
+
+def test_rotate_text_asymmetric_requires_recipients():
+    from dotseal.exceptions import EncryptionError
+    prv, pub = crypto.generate_recipient_keypair()
+    enc = core.encrypt_text_asymmetric("FOO=bar\n", [pub])
+    with pytest.raises(EncryptionError, match="At least one recipient"):
+        core.rotate_text_asymmetric(enc, prv, [])
+
+
+# --- CLI rotate --------------------------------------------------------------
+
+def test_cli_rotate_symmetric(project):
+    (project / ".env").write_text("FOO=secret\n")
+    assert main(["init"]) == 0
+    assert main(["encrypt"]) == 0
+    old_enc = (project / ".env.enc").read_text()
+
+    (project / "new.key").write_text(crypto.generate_master_key() + "\n")
+    assert main(["rotate", ".env.enc", "--new-key-file", "new.key"]) == 0
+
+    new_enc = (project / ".env.enc").read_text()
+    assert new_enc != old_enc
+    new_key = crypto.load_key_bytes((project / "new.key").read_text().strip())
+    assert core.decrypt_text(new_enc, new_key) == "FOO=secret\n"
+
+
+def test_cli_rotate_symmetric_output_flag(project):
+    (project / ".env").write_text("FOO=secret\n")
+    assert main(["init"]) == 0
+    assert main(["encrypt"]) == 0
+    original_enc = (project / ".env.enc").read_text()
+
+    (project / "new.key").write_text(crypto.generate_master_key() + "\n")
+    assert main(["rotate", ".env.enc", "--new-key-file", "new.key", "--output", "rotated.enc"]) == 0
+
+    # Original unchanged; rotated written to --output path.
+    assert (project / ".env.enc").read_text() == original_enc
+    assert (project / "rotated.enc").exists()
+
+
+def test_cli_rotate_symmetric_requires_new_key(project, capsys):
+    (project / ".env").write_text("FOO=bar\n")
+    assert main(["init"]) == 0
+    assert main(["encrypt"]) == 0
+    rc = main(["rotate", ".env.enc"])
+    assert rc == 1
+    assert "new-key" in capsys.readouterr().err
+
+
+def test_cli_rotate_asymmetric(project):
+    assert main(["keygen", "--out", "alice.prv"]) == 0
+    alice_pub = crypto.public_key_str_from_private(
+        (project / "alice.prv").read_text().strip()
+    )
+    (project / ".env").write_text("SECRET=x\n")
+    assert main(["encrypt", "-r", alice_pub]) == 0
+    old_enc = (project / ".env.enc").read_text()
+
+    assert main([
+        "rotate", ".env.enc",
+        "--private-key-file", "alice.prv",
+        "--recipient", alice_pub,
+    ]) == 0
+
+    new_enc = (project / ".env.enc").read_text()
+    assert new_enc != old_enc
+    assert core.decrypt_text_asymmetric(new_enc, (project / "alice.prv").read_text().strip()) == "SECRET=x\n"
+
+
+def test_cli_rotate_asymmetric_requires_recipients(project, capsys):
+    assert main(["keygen", "--out", "alice.prv"]) == 0
+    alice_pub = crypto.public_key_str_from_private(
+        (project / "alice.prv").read_text().strip()
+    )
+    (project / ".env").write_text("SECRET=x\n")
+    assert main(["encrypt", "-r", alice_pub]) == 0
+    rc = main(["rotate", ".env.enc", "--private-key-file", "alice.prv"])
+    assert rc == 1
+    assert "recipient" in capsys.readouterr().err.lower()
+
+
+def test_cli_rotate_warns_on_recipient_count_change(project, capsys):
+    assert main(["keygen", "--out", "alice.prv"]) == 0
+    assert main(["keygen", "--out", "bob.prv", "--force"]) == 0
+    alice_pub = crypto.public_key_str_from_private(
+        (project / "alice.prv").read_text().strip()
+    )
+    bob_pub = crypto.public_key_str_from_private(
+        (project / "bob.prv").read_text().strip()
+    )
+    (project / ".env").write_text("SECRET=x\n")
+    assert main(["encrypt", "-r", alice_pub, "-r", bob_pub]) == 0
+    assert main([
+        "rotate", ".env.enc",
+        "--private-key-file", "alice.prv",
+        "--recipient", alice_pub,
+    ]) == 0
+    err = capsys.readouterr().err
+    assert "recipient count changed" in err
