@@ -202,10 +202,20 @@ def cmd_encrypt(args: argparse.Namespace) -> int:
     recipients = _collect_recipients(args)
 
     if recipients:
-        out = core.encrypt_text_asymmetric(text, recipients)
+        out = core.encrypt_text_asymmetric(
+            text,
+            recipients,
+            plain_keys=getattr(args, "plain_key", None),
+            plain_key_regex=getattr(args, "plain_key_regex", None),
+        )
         mode_note = f"{len(recipients)} recipient(s)"
     else:
-        out = core.encrypt_text(text, _resolve_key_bytes(args, search_dir=search_dir))
+        out = core.encrypt_text(
+            text,
+            _resolve_key_bytes(args, search_dir=search_dir),
+            plain_keys=getattr(args, "plain_key", None),
+            plain_key_regex=getattr(args, "plain_key_regex", None),
+        )
         mode_note = "symmetric"
 
     # .env.enc is safe to commit -> default permissions are fine.
@@ -297,16 +307,38 @@ def cmd_edit(args: argparse.Namespace) -> int:
                 if is_asym and original_text is not None:
                     # Re-encrypt reusing the original DEK + recipients (only our key needed).
                     private_key = _resolve_private_key(args, search_dir=search_dir)
-                    out = core.reencrypt_text_asymmetric(edited, private_key, original_text)
+                    out = core.reencrypt_text_asymmetric(
+                        edited,
+                        private_key,
+                        original_text,
+                        plain_keys=getattr(args, "plain_key", None),
+                        plain_key_regex=getattr(args, "plain_key_regex", None),
+                    )
                 elif is_asym:
-                    out = core.encrypt_text_asymmetric(edited, recipients)
+                    out = core.encrypt_text_asymmetric(
+                        edited,
+                        recipients,
+                        plain_keys=getattr(args, "plain_key", None),
+                        plain_key_regex=getattr(args, "plain_key_regex", None),
+                    )
                 else:
                     key_bytes = _resolve_key_bytes(args, search_dir=search_dir)
                     if original_text is not None:
                         # Unchanged values keep their ciphertext (diff-friendly).
-                        out = core.reencrypt_text(edited, key_bytes, original_text)
+                        out = core.reencrypt_text(
+                            edited,
+                            key_bytes,
+                            original_text,
+                            plain_keys=getattr(args, "plain_key", None),
+                            plain_key_regex=getattr(args, "plain_key_regex", None),
+                        )
                     else:
-                        out = core.encrypt_text(edited, key_bytes)
+                        out = core.encrypt_text(
+                            edited,
+                            key_bytes,
+                            plain_keys=getattr(args, "plain_key", None),
+                            plain_key_regex=getattr(args, "plain_key_regex", None),
+                        )
                 break
             except DotsealError as exc:
                 # Never throw the user's edits away over a typo: offer to
@@ -402,6 +434,20 @@ def build_parser() -> argparse.ArgumentParser:
             help="File listing one recipient public key per line (# comments allowed).",
         )
 
+    def add_selective_encryption_args(p: argparse.ArgumentParser) -> None:
+        p.add_argument(
+            "--plain-key",
+            action="append",
+            metavar="KEY",
+            help="Keep this key unencrypted (repeatable).",
+        )
+        p.add_argument(
+            "--plain-key-regex",
+            action="append",
+            metavar="REGEX",
+            help="Keep keys matching this regex unencrypted (repeatable, fullmatch).",
+        )
+
     sub = parser.add_subparsers(dest="command", required=True)
 
     p_init = sub.add_parser("init", help="Generate a master key and gitignore it (symmetric).")
@@ -427,6 +473,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_enc.add_argument("output", nargs="?", default=".env.enc")
     add_key_args(p_enc)
     add_recipient_args(p_enc)
+    add_selective_encryption_args(p_enc)
     p_enc.set_defaults(func=cmd_encrypt)
 
     p_dec = sub.add_parser("decrypt", help="Decrypt .env.enc into a cleartext .env (auto-detects mode).")
@@ -441,6 +488,7 @@ def build_parser() -> argparse.ArgumentParser:
     add_key_args(p_edit)
     add_private_key_args(p_edit)
     add_recipient_args(p_edit)
+    add_selective_encryption_args(p_edit)
     p_edit.set_defaults(func=cmd_edit)
 
     p_add = sub.add_parser(

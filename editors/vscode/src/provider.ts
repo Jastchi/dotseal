@@ -1,19 +1,30 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as vscode from "vscode";
-import { decryptText, encryptText, reencryptText } from "./dotseal/core";
+import {
+  decryptText,
+  encryptText,
+  reencryptText,
+  SelectiveEncryptionOptions
+} from "./dotseal/core";
 import { DotsealError } from "./dotseal/errors";
 import { KeyOptions, resolveKeyBytes } from "./dotseal/keys";
 
 export const DOTSEAL_SCHEME = "dotseal";
 
 export type KeyOptionsProvider = () => KeyOptions;
+export type SelectiveEncryptionOptionsProvider = (
+  fileUri: vscode.Uri
+) => SelectiveEncryptionOptions;
 
 export class DotsealFsProvider implements vscode.FileSystemProvider {
   private readonly emitter = new vscode.EventEmitter<vscode.FileChangeEvent[]>();
   readonly onDidChangeFile = this.emitter.event;
 
-  constructor(private readonly getKeyOptions: KeyOptionsProvider) {}
+  constructor(
+    private readonly getKeyOptions: KeyOptionsProvider,
+    private readonly getSelectiveEncryptionOptions: SelectiveEncryptionOptionsProvider = () => ({})
+  ) {}
 
   watch(): vscode.Disposable {
     return new vscode.Disposable(() => undefined);
@@ -76,7 +87,11 @@ export class DotsealFsProvider implements vscode.FileSystemProvider {
       const encrypted =
         original !== undefined
           ? reencryptText(cleartext, keyBytes, original)
-          : encryptText(cleartext, keyBytes);
+          : encryptText(
+              cleartext,
+              keyBytes,
+              this.getSelectiveEncryptionOptions(vscode.Uri.file(realPath))
+            );
       // Write to a sibling temp file and rename so a crash mid-write can
       // never leave a truncated/corrupt .env.enc behind.
       const tmpPath = path.join(

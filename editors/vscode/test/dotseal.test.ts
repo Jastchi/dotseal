@@ -94,6 +94,27 @@ describe("dotseal core", () => {
 
     expect(encrypted).not.toMatch(/\n\n# dotseal:/);
   });
+
+  it("supports selective encryption via plain keys", () => {
+    const encrypted = encryptText("PUBLIC=ok\nSECRET=shh\n", keyBytes, {
+      plainKeys: ["PUBLIC"]
+    });
+
+    expect(encrypted).toContain("PUBLIC=ok");
+    expect(encrypted).toContain("SECRET=ENC[AES_GCM,data:");
+    expect(encrypted).toContain("plain_keys=PUBLIC");
+  });
+
+  it("supports selective encryption via regex", () => {
+    const encrypted = encryptText("PUBLIC_A=ok\nPUBLIC_B=ok\nSECRET=shh\n", keyBytes, {
+      plainKeyRegex: ["PUBLIC_.+"]
+    });
+
+    expect(encrypted).toContain("PUBLIC_A=ok");
+    expect(encrypted).toContain("PUBLIC_B=ok");
+    expect(encrypted).toContain("SECRET=ENC[AES_GCM,data:");
+    expect(encrypted).toContain("plain_re=");
+  });
 });
 
 describe("dotseal core re-encryption guards", () => {
@@ -162,6 +183,17 @@ describe("dotseal core reencryptText", () => {
     expect(newTokens.get("KEEP")).toBe(tokens.get("KEEP"));
     expect(newTokens.get("CHANGE")).not.toBe(tokens.get("CHANGE"));
     expect(decryptText(result, keyBytes)).toBe("KEEP=same\nCHANGE=new\n");
+  });
+
+  it("preserves selective encryption policy by default", () => {
+    const original = encryptText("PUBLIC=old\nSECRET=old\n", keyBytes, {
+      plainKeys: ["PUBLIC"]
+    });
+    const result = reencryptText("PUBLIC=new\nSECRET=new\n", keyBytes, original);
+
+    expect(result).toContain("PUBLIC=new");
+    expect(result).toContain("SECRET=ENC[AES_GCM,data:");
+    expect(result).toContain("plain_keys=PUBLIC");
   });
 
   it("refuses a wrong key via the fingerprint", () => {

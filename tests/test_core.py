@@ -436,6 +436,57 @@ def test_encrypt_text_partial_encryption_with_matching_key_is_supported():
     assert core.decrypt_to_dict(enc2, key) == {"FOO": "bar", "NEW": "cleartext"}
 
 
+def test_encrypt_text_respects_plain_key_policy():
+    key = crypto.load_key_bytes(crypto.generate_master_key())
+    enc = core.encrypt_text(
+        "PUBLIC=ok\nSECRET=shh\n",
+        key,
+        plain_keys=["PUBLIC"],
+    )
+    entries = {e.key: e.value for e in parser.parse(enc).entries()}
+    meta = core.parse_metadata(parser.parse(enc))
+    assert entries["PUBLIC"] == "ok"
+    assert entries["SECRET"].startswith("ENC[")
+    assert meta.get(core.PLAINTEXT_KEYS_TOKEN) == "PUBLIC"
+
+
+def test_encrypt_text_respects_plain_key_regex_policy():
+    key = crypto.load_key_bytes(crypto.generate_master_key())
+    enc = core.encrypt_text(
+        "PUBLIC_A=one\nPUBLIC_B=two\nSECRET=three\n",
+        key,
+        plain_key_regex=[r"PUBLIC_.+"],
+    )
+    entries = {e.key: e.value for e in parser.parse(enc).entries()}
+    assert entries["PUBLIC_A"] == "one"
+    assert entries["PUBLIC_B"] == "two"
+    assert entries["SECRET"].startswith("ENC[")
+
+
+def test_reencrypt_text_preserves_metadata_policy_by_default():
+    key = crypto.load_key_bytes(crypto.generate_master_key())
+    original = core.encrypt_text("PUBLIC=old\nSECRET=old\n", key, plain_keys=["PUBLIC"])
+    updated = core.reencrypt_text("PUBLIC=new\nSECRET=new\n", key, original)
+    entries = {e.key: e.value for e in parser.parse(updated).entries()}
+    meta = core.parse_metadata(parser.parse(updated))
+    assert entries["PUBLIC"] == "new"
+    assert entries["SECRET"].startswith("ENC[")
+    assert meta.get(core.PLAINTEXT_KEYS_TOKEN) == "PUBLIC"
+
+
+def test_add_rm_recipient_preserves_metadata_policy():
+    priv_a, pub_a = crypto.generate_recipient_keypair()
+    _, pub_b = crypto.generate_recipient_keypair()
+    enc = core.encrypt_text_asymmetric("PUBLIC=ok\nSECRET=shh\n", [pub_a], plain_keys=["PUBLIC"])
+    with_b = core.add_recipient_to_text(enc, priv_a, pub_b)
+    after_rm = core.remove_recipient_from_text(with_b, pub_b)
+    meta = core.parse_metadata(parser.parse(after_rm))
+    entries = {e.key: e.value for e in parser.parse(after_rm).entries()}
+    assert meta.get(core.PLAINTEXT_KEYS_TOKEN) == "PUBLIC"
+    assert entries["PUBLIC"] == "ok"
+    assert entries["SECRET"].startswith("ENC[")
+
+
 # --- key resolution precedence -------------------------------------------------
 
 def test_explicit_key_file_beats_env_var(tmp_path, monkeypatch):

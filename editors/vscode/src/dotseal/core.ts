@@ -20,6 +20,8 @@ export const METADATA_PREFIX = "# dotseal:";
 export const METADATA_VERSION = "1";
 export const ALGORITHM_ASYM = "AES_GCM+X25519";
 export const METADATA_VERSION_ASYM = "2";
+const PLAINTEXT_KEYS_TOKEN = "plain_keys";
+const PLAINTEXT_REGEX_TOKEN = "plain_re";
 
 // Recipient slots live in their own comment lines; the footer always has a
 // space after the colon, which is how the two are told apart (mirrors the
@@ -27,8 +29,134 @@ export const METADATA_VERSION_ASYM = "2";
 const RECIPIENT_PREFIX = `${METADATA_PREFIX}recipient `;
 const FOOTER_PREFIX = `${METADATA_PREFIX} `;
 
-export function buildMetadataLine(keyBytes: Buffer): string {
-  return `${METADATA_PREFIX} v=${METADATA_VERSION} alg=${ALGORITHM} key_fp=${keyFingerprint(keyBytes)}`;
+export interface SelectiveEncryptionOptions {
+  plainKeys?: string[];
+  plainKeyRegex?: string[];
+}
+
+function encodeRegexToken(patterns: string[]): string {
+  return patterns
+    .map((pattern) => Buffer.from(pattern, "utf8").toString("base64url"))
+    .join(",");
+}
+
+function decodeRegexToken(value: string): string[] {
+  if (value.trim().length === 0) {
+    return [];
+  }
+  const decoded: string[] = [];
+  for (const chunk of value.split(",")) {
+    const token = chunk.trim();
+    if (token.length === 0) {
+      continue;
+    }
+    try {
+      decoded.push(Buffer.from(token, "base64url").toString("utf8"));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new EncryptionError(
+        `Invalid dotseal metadata: failed to decode plain-key regex policy (${message}).`
+      );
+    }
+  }
+  return decoded;
+}
+
+function parsePlaintextPolicy(meta: Map<string, string>): {
+  plainKeys: Set<string>;
+  plainKeyRegex: string[];
+  plainKeyRegexCompiled: RegExp[];
+} {
+  const keys = new Set<string>();
+  for (const key of (meta.get(PLAINTEXT_KEYS_TOKEN) ?? "").split(",")) {
+    if (key.length > 0) {
+      keys.add(key);
+    }
+  }
+
+  const regexes = decodeRegexToken(meta.get(PLAINTEXT_REGEX_TOKEN) ?? "");
+  const compiled = regexes.map((pattern) => {
+    try {
+      return new RegExp(pattern);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new EncryptionError(`Invalid plain-key regex in policy: ${JSON.stringify(pattern)} (${message})`);
+    }
+  });
+  return { plainKeys: keys, plainKeyRegex: regexes, plainKeyRegexCompiled: compiled };
+}
+
+function resolvePlaintextPolicy(
+  parsed: ParsedEnv,
+  options?: SelectiveEncryptionOptions
+): {
+  plainKeys: Set<string>;
+  plainKeyRegex: string[];
+  plainKeyRegexCompiled: RegExp[];
+} {
+  if (options?.plainKeys === undefined && options?.plainKeyRegex === undefined) {
+    return parsePlaintextPolicy(parseMetadata(parsed));
+  }
+  const plainKeys = new Set((options?.plainKeys ?? []).filter((key) => key.length > 0));
+  const plainKeyRegex = (options?.plainKeyRegex ?? []).filter((pattern) => pattern.length > 0);
+  const plainKeyRegexCompiled = plainKeyRegex.map((pattern) => {
+    try {
+      return new RegExp(pattern);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new EncryptionError(`Invalid plain-key regex in policy: ${JSON.stringify(pattern)} (${message})`);
+    }
+  });
+  return { plainKeys, plainKeyRegex, plainKeyRegexCompiled };
+}
+
+function shouldEncryptValue(
+  key: string,
+  plainKeys: Set<string>,
+  plainKeyRegexCompiled: RegExp[]
+): boolean {
+  if (plainKeys.has(key)) {
+    return false;
+  }
+  return !plainKeyRegexCompiled.some((pattern) => {
+    const match = key.match(pattern);
+    return match !== null && match.index === 0 && match[0] === key;
+  });
+}
+
+function metadataPolicySuffix(plainKeys: Set<string>, plainKeyRegex: string[]): string {
+  const tokens: string[] = [];
+  if (plainKeys.size > 0) {
+    tokens.push(`${PLAINTEXT_KEYS_TOKEN}=${Array.from(plainKeys).sort().join(",")}`);
+  }
+  if (plainKeyRegex.length > 0) {
+    tokens.push(`${PLAINTEXT_REGEX_TOKEN}=${encodeRegexToken(plainKeyRegex)}`);
+  }
+  return tokens.length > 0 ? ` ${tokens.join(" ")}` : "";
+}
+
+export function buildMetadataLine(
+  keyBytes: Buffer,
+  options?: SelectiveEncryptionOptions
+): string {
+  const policy = {
+    plainKeys: new Set((options?.plainKeys ?? []).filter((key) => key.length > 0)),
+    plainKeyRegex: (options?.plainKeyRegex ?? []).filter((pattern) => pattern.length > 0)
+  };
+  // Validate regexes early so callers get a clear error.
+  for (const pattern of policy.plainKeyRegex) {
+    try {
+      // eslint-disable-next-line no-new
+      new RegExp(pattern);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new EncryptionError(`Invalid plain-key regex in policy: ${JSON.stringify(pattern)} (${message})`);
+    }
+  }
+  return (
+    `${METADATA_PREFIX} v=${METADATA_VERSION} alg=${ALGORITHM} key_fp=${keyFingerprint(keyBytes)}` +
+    metadataPolicySuffix(policy.plainKeys, policy.plainKeyRegex)
+  );
 }
 
 function parseTokens(body: string): Map<string, string> {
@@ -109,7 +237,11 @@ function stripManagedComments(parsed: ParsedEnv): void {
   });
 }
 
-export function encryptText(text: string, keyBytes: Buffer): string {
+export function encryptText(
+  text: string,
+  keyBytes: Buffer,
+  options?: SelectiveEncryptionOptions
+): string {
   const parsed = parse(text);
   assertNotAsymmetric(parsed);
   if (hasEncryptedValues(parsed)) {
@@ -124,6 +256,7 @@ export function encryptText(text: string, keyBytes: Buffer): string {
     // result would be undecryptable by either key.
     verifyKey(parsed, keyBytes);
   }
+  const policy = resolvePlaintextPolicy(parsed, options);
   stripManagedComments(parsed);
   for (const record of parsed.records) {
     if (record.kind !== "entry") {
@@ -132,7 +265,11 @@ export function encryptText(text: string, keyBytes: Buffer): string {
     if (isEncryptedValue(record.value)) {
       continue;
     }
-    record.value = encryptValue(keyBytes, record.value, record.key);
+    if (shouldEncryptValue(record.key, policy.plainKeys, policy.plainKeyRegexCompiled)) {
+      record.value = encryptValue(keyBytes, record.value, record.key);
+    } else {
+      record.value = formatValue(record.value);
+    }
   }
 
   const body = serialize(parsed).replace(/\n+$/, "");
@@ -140,7 +277,12 @@ export function encryptText(text: string, keyBytes: Buffer): string {
   if (body.length > 0) {
     parts.push(body);
   }
-  parts.push(buildMetadataLine(keyBytes));
+  parts.push(
+    buildMetadataLine(keyBytes, {
+      plainKeys: Array.from(policy.plainKeys),
+      plainKeyRegex: policy.plainKeyRegex
+    })
+  );
   return `${parts.join("\n")}\n`;
 }
 
@@ -152,11 +294,13 @@ export function encryptText(text: string, keyBytes: Buffer): string {
 export function reencryptText(
   cleartext: string,
   keyBytes: Buffer,
-  originalText: string
+  originalText: string,
+  options?: SelectiveEncryptionOptions
 ): string {
   const original = parse(originalText);
   assertNotAsymmetric(original);
   verifyKey(original, keyBytes);
+  const policy = resolvePlaintextPolicy(original, options);
 
   const reusable = new Map<string, { token: string; plaintext: string }>();
   for (const record of original.records) {
@@ -182,6 +326,10 @@ export function reencryptText(
     if (record.kind !== "entry" || isEncryptedValue(record.value)) {
       continue;
     }
+    if (!shouldEncryptValue(record.key, policy.plainKeys, policy.plainKeyRegexCompiled)) {
+      record.value = formatValue(record.value);
+      continue;
+    }
     const previous = reusable.get(record.key);
     record.value =
       previous !== undefined && previous.plaintext === record.value
@@ -194,7 +342,12 @@ export function reencryptText(
   if (body.length > 0) {
     parts.push(body);
   }
-  parts.push(buildMetadataLine(keyBytes));
+  parts.push(
+    buildMetadataLine(keyBytes, {
+      plainKeys: Array.from(policy.plainKeys),
+      plainKeyRegex: policy.plainKeyRegex
+    })
+  );
   return `${parts.join("\n")}\n`;
 }
 

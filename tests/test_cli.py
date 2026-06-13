@@ -78,6 +78,27 @@ def test_encrypt_decrypt_roundtrip_via_cli(project):
     assert entries["QUOTED"] == "  spaced value  "
 
 
+def test_encrypt_with_plain_key_option(project):
+    (project / ".env").write_text("PUBLIC=ok\nSECRET=shh\n")
+    assert main(["init"]) == 0
+    assert main(["encrypt", "--plain-key", "PUBLIC"]) == 0
+    enc = (project / ".env.enc").read_text()
+    assert "PUBLIC=ok" in enc
+    assert "SECRET=ENC[AES_GCM,data:" in enc
+    assert "plain_keys=PUBLIC" in enc
+
+
+def test_encrypt_with_plain_key_regex_option(project):
+    (project / ".env").write_text("PUBLIC_A=1\nPUBLIC_B=2\nSECRET=3\n")
+    assert main(["init"]) == 0
+    assert main(["encrypt", "--plain-key-regex", "PUBLIC_.+"]) == 0
+    enc = (project / ".env.enc").read_text()
+    assert "PUBLIC_A=1" in enc
+    assert "PUBLIC_B=2" in enc
+    assert "SECRET=ENC[AES_GCM,data:" in enc
+    assert "plain_re=" in enc
+
+
 def test_decrypt_output_is_owner_only(project):
     (project / ".env").write_text("FOO=bar\n")
     assert main(["init"]) == 0
@@ -334,6 +355,26 @@ def test_edit_unchanged_values_keep_their_ciphertext(project, monkeypatch):
 
     assert after["KEEP"] == before["KEEP"]  # unchanged value: token reused
     assert after["CHANGE"] != before["CHANGE"]
+
+
+def test_edit_preserves_existing_plain_policy(project, monkeypatch):
+    editor_script = project / "fake_editor.py"
+    editor_script.write_text(
+        "import sys\n"
+        "p = sys.argv[1]\n"
+        "text = open(p).read().replace('PUBLIC=old', 'PUBLIC=new').replace('SECRET=old', 'SECRET=new')\n"
+        "open(p, 'w').write(text)\n"
+    )
+    monkeypatch.setenv("EDITOR", f"{sys.executable} {editor_script}")
+
+    (project / ".env").write_text("PUBLIC=old\nSECRET=old\n")
+    assert main(["init"]) == 0
+    assert main(["encrypt", "--plain-key", "PUBLIC"]) == 0
+    assert main(["edit"]) == 0
+    enc = (project / ".env.enc").read_text()
+    assert "PUBLIC=new" in enc
+    assert "SECRET=ENC[AES_GCM,data:" in enc
+    assert "plain_keys=PUBLIC" in enc
 
 
 # --- encrypt: refuses to brick a re-encrypted file ----------------------------

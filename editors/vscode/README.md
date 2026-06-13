@@ -29,6 +29,8 @@ Prefer `DOTSEAL_MASTER_KEY` or `.dotseal.key` over storing key material in edito
 - `dotseal.autoOpen`: automatically redirect dotenv-style encrypted env files (`.env.enc`, `.env.production.enc`, …) to the decrypted virtual editor. Defaults to `true`.
 - `dotseal.keyFile`: optional path to a key file.
 - `dotseal.masterKey`: optional base64 master key. This is supported for convenience, but storing secrets in editor settings is discouraged.
+- `dotseal.plaintextKeys`: exact variable names to keep unencrypted when the extension creates a new encrypted file.
+- `dotseal.plaintextKeyRegex`: regex patterns; keys that fully match any pattern are kept unencrypted when the extension creates a new encrypted file.
 
 ## Security Notes
 

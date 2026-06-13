@@ -62,6 +62,7 @@ Key options:
 
 - Symmetric: `--key`, `--key-file`
 - Asymmetric: `--private-key`, `--private-key-file`
+- Selective encryption: `--plain-key KEY` (repeatable), `--plain-key-regex REGEX` (repeatable; full key match)
 
 ## See also
 

@@ -1,4 +1,5 @@
 import * as vscode from "vscode";
+import { SelectiveEncryptionOptions } from "./dotseal/core";
 import { KeyOptions } from "./dotseal/keys";
 import { isEncryptedEnvFile } from "./envFile";
 import {
@@ -9,7 +10,7 @@ import {
 } from "./provider";
 
 export function activate(context: vscode.ExtensionContext): void {
-  const provider = new DotsealFsProvider(readKeyOptions);
+  const provider = new DotsealFsProvider(readKeyOptions, readSelectiveEncryptionOptions);
 
   context.subscriptions.push(
     vscode.workspace.registerFileSystemProvider(DOTSEAL_SCHEME, provider, {
@@ -135,6 +136,14 @@ function readKeyOptions(): KeyOptions {
   return {
     masterKey: inspected?.globalValue ?? "",
     keyFile: config.get<string>("keyFile", "")
+  };
+}
+
+function readSelectiveEncryptionOptions(fileUri: vscode.Uri): SelectiveEncryptionOptions {
+  const config = vscode.workspace.getConfiguration("dotseal", fileUri);
+  return {
+    plainKeys: config.get<string[]>("plaintextKeys", []),
+    plainKeyRegex: config.get<string[]>("plaintextKeyRegex", [])
   };
 }
 
