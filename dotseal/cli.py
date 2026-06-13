@@ -16,7 +16,6 @@ from __future__ import annotations
 import argparse
 import fnmatch
 import os
-import re
 import shlex
 import subprocess
 import sys
@@ -25,8 +24,6 @@ from typing import List, Optional
 
 from . import __version__, core, crypto, parser
 from .exceptions import DotsealError, KeyNotFoundError
-
-_KEY_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*\Z")
 
 _GITIGNORE_NOTE = "# Added by `dotseal init` -- never commit your master key"
 
@@ -61,14 +58,7 @@ def _warn_plain_keys_already_encrypted(
     """
     if not plain_keys:
         return
-    parsed = parser.parse(text)
-    already_enc = sorted(
-        k for k in plain_keys
-        if any(
-            r.kind == "entry" and r.key == k and crypto.is_encrypted_value(r.value)
-            for r in parsed.records
-        )
-    )
+    already_enc = core.already_encrypted_keys(text, plain_keys)
     if already_enc:
         _warn(
             "--plain-key has no effect on already-encrypted values: "
@@ -507,8 +497,7 @@ def cmd_add_recipient(args: argparse.Namespace) -> int:
         return 1
     private_key = _resolve_private_key(args, search_dir=search_dir)
     out = core.add_recipient_to_text(text, private_key, args.public_key)
-    with open(args.file, "w", encoding="utf-8") as fh:
-        fh.write(out)
+    core.write_secret_file(args.file, out, mode=0o644)
     fp = crypto.recipient_fingerprint(args.public_key)
     print(f"Added recipient {fp} to {args.file}")
     return 0
@@ -522,8 +511,7 @@ def cmd_rm_recipient(args: argparse.Namespace) -> int:
         )
         return 1
     out = core.remove_recipient_from_text(text, args.identifier)
-    with open(args.file, "w", encoding="utf-8") as fh:
-        fh.write(out)
+    core.write_secret_file(args.file, out, mode=0o644)
     print(f"Removed recipient {args.identifier} from {args.file}")
     print(
         "Note: the data key was not rotated; the removed recipient can still "
@@ -556,7 +544,7 @@ def cmd_set(args: argparse.Namespace) -> int:
         _err("set: argument must be in KEY=VALUE form")
         return 1
     key, _, value = args.assignment.partition("=")
-    if not _KEY_RE.match(key):
+    if not core.VALID_KEY_RE.match(key):
         _err(f"set: {key!r} is not a valid variable name (must match [A-Za-z_][A-Za-z0-9_]*)")
         return 1
     text = _read(args.file)
@@ -567,8 +555,7 @@ def cmd_set(args: argparse.Namespace) -> int:
     else:
         key_bytes = _resolve_key_bytes(args, search_dir=search_dir)
         out = core.set_value(text, key, value, key_bytes=key_bytes)
-    with open(args.file, "w", encoding="utf-8") as fh:
-        fh.write(out)
+    core.write_secret_file(args.file, out, mode=0o644)
     return 0
 
 

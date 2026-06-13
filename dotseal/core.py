@@ -52,8 +52,24 @@ RECIPIENT_PREFIX = f"{METADATA_PREFIX}recipient "
 # which is how we tell it apart from the recipient lines above.
 _FOOTER_PREFIX = f"{METADATA_PREFIX} "
 
+VALID_KEY_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*\Z")
+
 
 # --- Key resolution ---------------------------------------------------------
+
+def _find_file_upward(filename: str, start_dir: Optional[str] = None) -> Optional[str]:
+    """Walk up the directory tree from ``start_dir`` and return the first path
+    where ``filename`` exists as a regular file, or ``None`` if not found."""
+    current = os.path.abspath(start_dir or os.getcwd())
+    while True:
+        candidate = os.path.join(current, filename)
+        if os.path.isfile(candidate):
+            return candidate
+        parent = os.path.dirname(current)
+        if parent == current:
+            return None
+        current = parent
+
 
 def find_key_file(start_dir: Optional[str] = None) -> Optional[str]:
     """Return the path to a local key file, searching upward from ``start_dir``.
@@ -61,15 +77,7 @@ def find_key_file(start_dir: Optional[str] = None) -> Optional[str]:
     Walks up the directory tree (like git looking for ``.git``) so the tool
     works from subdirectories of a project.
     """
-    current = os.path.abspath(start_dir or os.getcwd())
-    while True:
-        candidate = os.path.join(current, KEY_FILE_NAME)
-        if os.path.isfile(candidate):
-            return candidate
-        parent = os.path.dirname(current)
-        if parent == current:
-            return None
-        current = parent
+    return _find_file_upward(KEY_FILE_NAME, start_dir)
 
 
 def resolve_master_key(
@@ -108,7 +116,7 @@ def resolve_master_key(
         return env_value.strip()
 
     path = find_key_file(search_dir)
-    if path and os.path.isfile(path):
+    if path:
         with open(path, "r", encoding="utf-8") as fh:
             return fh.read().strip()
 
@@ -121,15 +129,7 @@ def resolve_master_key(
 
 def find_private_key_file(start_dir: Optional[str] = None) -> Optional[str]:
     """Return the path to a local recipient private key file, searching upward."""
-    current = os.path.abspath(start_dir or os.getcwd())
-    while True:
-        candidate = os.path.join(current, PRIVATE_KEY_FILE_NAME)
-        if os.path.isfile(candidate):
-            return candidate
-        parent = os.path.dirname(current)
-        if parent == current:
-            return None
-        current = parent
+    return _find_file_upward(PRIVATE_KEY_FILE_NAME, start_dir)
 
 
 def resolve_private_key(
@@ -164,7 +164,7 @@ def resolve_private_key(
         return env_value.strip()
 
     path = find_private_key_file(search_dir)
-    if path and os.path.isfile(path):
+    if path:
         with open(path, "r", encoding="utf-8") as fh:
             return fh.read().strip()
 
@@ -289,7 +289,7 @@ def keys_newly_sealed_by_policy_override(
         return []
     old_keys, old_regex = parse_plaintext_policy(parse_metadata(original))
     old_compiled = _compile_regexes(old_regex)
-    new_keys, new_regex, new_compiled = _resolved_plaintext_policy(
+    new_keys, _, new_compiled = _resolved_plaintext_policy(
         original, plain_keys, plain_key_regex
     )
     newly_sealed: List[str] = []
@@ -423,6 +423,18 @@ def _strip_managed_comments(parsed: parser.ParsedEnv) -> None:
 
 
 # --- Whole-file transforms --------------------------------------------------
+
+def already_encrypted_keys(text: str, plain_keys: List[str]) -> List[str]:
+    """Return those keys from ``plain_keys`` whose values are already ENC[...] in ``text``."""
+    parsed = parser.parse(text)
+    return sorted(
+        k for k in plain_keys
+        if any(
+            r.kind == "entry" and r.key == k and crypto.is_encrypted_value(r.value)
+            for r in parsed.records
+        )
+    )
+
 
 def _has_encrypted_values(parsed: parser.ParsedEnv) -> bool:
     return any(
@@ -949,18 +961,17 @@ def get_value(
             )
         verify_key(parsed, key_bytes)
 
-        assert key_bytes is not None
         def _decrypt(token: str, name: str) -> str:
             return crypto.decrypt_value(key_bytes, token, aad=name)
 
-    found: Optional[str] = None
+    last: Optional[parser.Record] = None
     for record in parsed.records:
         if record.kind == "entry" and record.key == key:
-            found = _decrypt(record.value, record.key) if crypto.is_encrypted_value(record.value) else record.value
+            last = record
 
-    if found is None:
+    if last is None:
         raise KeyNotFoundError(f"Key not found: {key!r}")
-    return found
+    return _decrypt(last.value, last.key) if crypto.is_encrypted_value(last.value) else last.value
 
 
 def set_value(
@@ -980,6 +991,10 @@ def set_value(
     automatically because it is read from the original file's metadata
     inside ``reencrypt_text``.
     """
+    if not VALID_KEY_RE.match(key):
+        raise ValueError(
+            f"Invalid variable name {key!r}: must match [A-Za-z_][A-Za-z0-9_]*"
+        )
     parsed_original = parser.parse(text)
     is_asym = _is_asymmetric(parsed_original)
 

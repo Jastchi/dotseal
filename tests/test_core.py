@@ -1021,6 +1021,13 @@ def test_set_value_symmetric_requires_key_bytes():
         core.set_value(enc, "FOO", "new")
 
 
+def test_set_value_invalid_key_name_raises():
+    key_bytes = crypto.load_key_bytes(crypto.generate_master_key())
+    enc = core.encrypt_text("FOO=bar\n", key_bytes)
+    with pytest.raises(ValueError, match="Invalid variable name"):
+        core.set_value(enc, "123invalid", "value", key_bytes=key_bytes)
+
+
 # --- rotate_text -------------------------------------------------------------
 
 def test_rotate_text_round_trips_values():

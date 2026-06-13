@@ -114,16 +114,13 @@ def load_key_bytes(master_key: str) -> bytes:
         raise InvalidMasterKeyError("Master key is empty.")
     try:
         raw = base64.b64decode(cleaned, validate=True)
+        if base64.b64encode(raw).decode("ascii") != cleaned:
+            raise binascii.Error("non-canonical encoding")
     except (binascii.Error, ValueError) as exc:
         raise InvalidMasterKeyError(
             "Master key is not valid base64. It must be a base64-encoded "
             "32-byte key as produced by `dotseal init`."
         ) from exc
-    if base64.b64encode(raw).decode("ascii") != cleaned:
-        raise InvalidMasterKeyError(
-            "Master key is not valid base64. It must be a base64-encoded "
-            "32-byte key as produced by `dotseal init`."
-        )
     if len(raw) != KEY_SIZE:
         raise InvalidMasterKeyError(
             f"Master key must decode to {KEY_SIZE} bytes (got {len(raw)}). "
