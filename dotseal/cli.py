@@ -507,8 +507,7 @@ def cmd_add_recipient(args: argparse.Namespace) -> int:
         return 1
     private_key = _resolve_private_key(args, search_dir=search_dir)
     out = core.add_recipient_to_text(text, private_key, args.public_key)
-    with open(args.file, "w", encoding="utf-8") as fh:
-        fh.write(out)
+    core.write_secret_file(args.file, out, mode=0o644)
     fp = crypto.recipient_fingerprint(args.public_key)
     print(f"Added recipient {fp} to {args.file}")
     return 0
@@ -522,8 +521,7 @@ def cmd_rm_recipient(args: argparse.Namespace) -> int:
         )
         return 1
     out = core.remove_recipient_from_text(text, args.identifier)
-    with open(args.file, "w", encoding="utf-8") as fh:
-        fh.write(out)
+    core.write_secret_file(args.file, out, mode=0o644)
     print(f"Removed recipient {args.identifier} from {args.file}")
     print(
         "Note: the data key was not rotated; the removed recipient can still "
@@ -567,8 +565,7 @@ def cmd_set(args: argparse.Namespace) -> int:
     else:
         key_bytes = _resolve_key_bytes(args, search_dir=search_dir)
         out = core.set_value(text, key, value, key_bytes=key_bytes)
-    with open(args.file, "w", encoding="utf-8") as fh:
-        fh.write(out)
+    core.write_secret_file(args.file, out, mode=0o644)
     return 0
 
 

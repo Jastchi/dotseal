@@ -64,5 +64,5 @@ class ParseError(DotsealError):
     """Raised when a .env / .env.enc file cannot be parsed."""
 
 
-class KeyNotFoundError(DotsealError):
+class KeyNotFoundError(DotsealError, KeyError):
     """Raised when a requested variable name does not exist in the file."""

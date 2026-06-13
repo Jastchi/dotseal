@@ -52,6 +52,8 @@ RECIPIENT_PREFIX = f"{METADATA_PREFIX}recipient "
 # which is how we tell it apart from the recipient lines above.
 _FOOTER_PREFIX = f"{METADATA_PREFIX} "
 
+_VALID_KEY_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*\Z")
+
 
 # --- Key resolution ---------------------------------------------------------
 
@@ -949,18 +951,17 @@ def get_value(
             )
         verify_key(parsed, key_bytes)
 
-        assert key_bytes is not None
         def _decrypt(token: str, name: str) -> str:
             return crypto.decrypt_value(key_bytes, token, aad=name)
 
-    found: Optional[str] = None
+    last: Optional[parser.Record] = None
     for record in parsed.records:
         if record.kind == "entry" and record.key == key:
-            found = _decrypt(record.value, record.key) if crypto.is_encrypted_value(record.value) else record.value
+            last = record
 
-    if found is None:
+    if last is None:
         raise KeyNotFoundError(f"Key not found: {key!r}")
-    return found
+    return _decrypt(last.value, last.key) if crypto.is_encrypted_value(last.value) else last.value
 
 
 def set_value(
@@ -980,6 +981,10 @@ def set_value(
     automatically because it is read from the original file's metadata
     inside ``reencrypt_text``.
     """
+    if not _VALID_KEY_RE.match(key):
+        raise ValueError(
+            f"Invalid variable name {key!r}: must match [A-Za-z_][A-Za-z0-9_]*"
+        )
     parsed_original = parser.parse(text)
     is_asym = _is_asymmetric(parsed_original)
 
