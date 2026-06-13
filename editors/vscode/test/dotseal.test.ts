@@ -115,6 +115,41 @@ describe("dotseal core", () => {
     expect(encrypted).toContain("SECRET=ENC[AES_GCM,data:");
     expect(encrypted).toContain("plain_re=");
   });
+
+  it("handles alternation regex correctly (fullmatch semantics)", () => {
+    // Pattern "ENV|ENV_VAR": key ENV_VAR must match fully.
+    // A leftmost-match simulation would wrongly match "ENV" and consider
+    // ENV_VAR encrypted; anchored ^(?:...)$ tries all alternatives at full length.
+    const encrypted = encryptText("ENV=x\nENV_VAR=y\nSECRET=z\n", keyBytes, {
+      plainKeyRegex: ["ENV|ENV_VAR"]
+    });
+
+    expect(encrypted).toContain("ENV=x");
+    expect(encrypted).toContain("ENV_VAR=y");
+    expect(encrypted).toContain("SECRET=ENC[AES_GCM,data:");
+  });
+
+  it("skips Python-only regex syntax in footer without crashing", () => {
+    // Create a properly encrypted file, then inject a Python-specific named-group
+    // pattern into the footer ((?P<name>ENV_.+) — valid Python, invalid JS).
+    // base64url("(?P<name>ENV_.+)") = "KD9QPG5hbWU-RU5WXy4rKQ"
+    const base = encryptText("ENV_VAR=original\nSECRET=shh\n", keyBytes);
+    const withPythonRegex = base.replace(
+      new RegExp(`# dotseal: v=1 alg=AES_GCM key_fp=\\S+`),
+      `# dotseal: v=1 alg=AES_GCM key_fp=${keyFingerprint(keyBytes)} plain_re=KD9QPG5hbWU-RU5WXy4rKQ`
+    );
+
+    // reencryptText must not throw; the Python-only pattern is silently skipped
+    // so all keys are encrypted (fail-closed).
+    expect(() =>
+      reencryptText("ENV_VAR=newval\nSECRET=newshh\n", keyBytes, withPythonRegex)
+    ).not.toThrow();
+
+    const result = reencryptText("ENV_VAR=newval\nSECRET=newshh\n", keyBytes, withPythonRegex);
+    // Pattern was skipped → both keys are encrypted (fail-closed).
+    expect(result).toContain("ENV_VAR=ENC[AES_GCM,data:");
+    expect(result).toContain("SECRET=ENC[AES_GCM,data:");
+  });
 });
 
 describe("dotseal core re-encryption guards", () => {

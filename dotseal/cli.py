@@ -6,6 +6,7 @@ Commands:
     encrypt [in] [out]       .env      -> .env.enc
     decrypt [in] [out]       .env.enc  -> .env  (auto-detects sym/asym)
     edit [file]              decrypt -> $EDITOR -> re-encrypt (sops-style)
+    rotate [file]            re-encrypt under a new key / fresh DEK
     add-recipient <pub>      grant a new recipient access to a file
     rm-recipient <pub|fp>    revoke a recipient's slot from a file
 """
@@ -439,6 +440,62 @@ def cmd_edit(args: argparse.Namespace) -> int:
             _secure_delete(tmp_path)
 
 
+def cmd_rotate(args: argparse.Namespace) -> int:
+    text = _read(args.file)
+    search_dir = os.path.dirname(os.path.abspath(args.file))
+    output = args.output or args.file
+    mode = core.file_mode(text)
+
+    if mode == "asymmetric":
+        private_key = _resolve_private_key(args, search_dir=search_dir)
+        recipients = _collect_recipients(args)
+        if not recipients:
+            _err(
+                "Asymmetric rotation requires at least one recipient. "
+                "Use --recipient or --recipients-file to specify who retains access."
+            )
+            return 1
+        old_count = len(core.parse_recipients(parser.parse(text)))
+        out = core.rotate_text_asymmetric(text, private_key, recipients)
+        if len(recipients) != old_count:
+            _warn(
+                f"recipient count changed: {old_count} -> {len(recipients)}. "
+                "Verify the new recipient list is correct."
+            )
+    else:
+        new_key_provided = getattr(args, "new_key", None) or getattr(args, "new_key_file", None)
+        if not new_key_provided:
+            _err(
+                "Symmetric rotation requires --new-key or --new-key-file. "
+                "Run `dotseal init --force` to generate a new key first."
+            )
+            return 1
+        old_key_bytes = crypto.load_key_bytes(
+            core.resolve_master_key(
+                getattr(args, "old_key", None),
+                key_file=getattr(args, "old_key_file", None),
+                search_dir=search_dir,
+            )
+        )
+        new_key_bytes = crypto.load_key_bytes(
+            core.resolve_master_key(
+                getattr(args, "new_key", None),
+                key_file=getattr(args, "new_key_file", None),
+            )
+        )
+        out = core.rotate_text(text, old_key_bytes, new_key_bytes)
+        print(f"Old fingerprint: {crypto.key_fingerprint(old_key_bytes)}")
+        print(f"New fingerprint: {crypto.key_fingerprint(new_key_bytes)}")
+
+    with open(output, "w", encoding="utf-8") as fh:
+        fh.write(out)
+    if output == args.file:
+        print(f"Rotated {args.file} (in-place)")
+    else:
+        print(f"Rotated {args.file} -> {output}")
+    return 0
+
+
 def cmd_add_recipient(args: argparse.Namespace) -> int:
     text = _read(args.file)
     search_dir = os.path.dirname(os.path.abspath(args.file))
@@ -500,7 +557,7 @@ def cmd_set(args: argparse.Namespace) -> int:
         return 1
     key, _, value = args.assignment.partition("=")
     if not _KEY_RE.match(key):
-        _err(f"set: {key!r} is not a valid variable name (must match [A-Za-z_][A-Za-z0-9_.]*)")
+        _err(f"set: {key!r} is not a valid variable name (must match [A-Za-z_][A-Za-z0-9_]*)")
         return 1
     text = _read(args.file)
     search_dir = os.path.dirname(os.path.abspath(args.file))
@@ -631,6 +688,23 @@ def build_parser() -> argparse.ArgumentParser:
     add_recipient_args(p_edit)
     add_selective_encryption_args(p_edit)
     p_edit.set_defaults(func=cmd_edit)
+
+    p_rot = sub.add_parser(
+        "rotate",
+        help="Re-encrypt under a new master key (symmetric) or fresh DEK (asymmetric).",
+    )
+    p_rot.add_argument("file", nargs="?", default=".env.enc")
+    p_rot.add_argument(
+        "--output",
+        help="Write rotated output here instead of overwriting the input file.",
+    )
+    p_rot.add_argument("--old-key", help="Old master key (base64). Falls back to ambient key if omitted.")
+    p_rot.add_argument("--old-key-file", help="Old master key file.")
+    p_rot.add_argument("--new-key", help="New master key (base64).")
+    p_rot.add_argument("--new-key-file", help="New master key file.")
+    add_private_key_args(p_rot)
+    add_recipient_args(p_rot)
+    p_rot.set_defaults(func=cmd_rotate)
 
     p_add = sub.add_parser(
         "add-recipient", help="Grant a new recipient access to an asymmetric file."

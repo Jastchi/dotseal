@@ -1019,3 +1019,57 @@ def test_set_value_symmetric_requires_key_bytes():
     enc = core.encrypt_text("FOO=bar\n", key_bytes)
     with pytest.raises(MasterKeyNotFoundError):
         core.set_value(enc, "FOO", "new")
+
+
+# --- rotate_text -------------------------------------------------------------
+
+def test_rotate_text_round_trips_values():
+    old_key = crypto.load_key_bytes(crypto.generate_master_key())
+    new_key = crypto.load_key_bytes(crypto.generate_master_key())
+    enc = core.encrypt_text("FOO=bar\nBAZ=qux\n", old_key)
+    rotated = core.rotate_text(enc, old_key, new_key)
+    assert core.decrypt_text(rotated, new_key) == "FOO=bar\nBAZ=qux\n"
+
+
+def test_rotate_text_uses_new_fingerprint():
+    old_key = crypto.load_key_bytes(crypto.generate_master_key())
+    new_key = crypto.load_key_bytes(crypto.generate_master_key())
+    enc = core.encrypt_text("FOO=bar\n", old_key)
+    rotated = core.rotate_text(enc, old_key, new_key)
+    meta = core.parse_metadata(parser.parse(rotated))
+    assert meta["key_fp"] == crypto.key_fingerprint(new_key)
+
+
+def test_rotate_text_preserves_plaintext_policy():
+    old_key = crypto.load_key_bytes(crypto.generate_master_key())
+    new_key = crypto.load_key_bytes(crypto.generate_master_key())
+    enc = core.encrypt_text("PUBLIC=ok\nSECRET=shh\n", old_key, plain_keys=["PUBLIC"])
+    rotated = core.rotate_text(enc, old_key, new_key)
+    assert "PUBLIC=ok" in rotated
+    assert "plain_keys=PUBLIC" in rotated
+    assert core.decrypt_text(rotated, new_key) == "PUBLIC=ok\nSECRET=shh\n"
+
+
+def test_rotate_text_rejects_identical_keys():
+    key = crypto.load_key_bytes(crypto.generate_master_key())
+    enc = core.encrypt_text("FOO=bar\n", key)
+    with pytest.raises(EncryptionError, match="identical"):
+        core.rotate_text(enc, key, key)
+
+
+def test_rotate_text_rejects_asymmetric_file():
+    _, pub = crypto.generate_recipient_keypair()
+    enc = core.encrypt_text_asymmetric("FOO=bar\n", [pub])
+    old_key = crypto.load_key_bytes(crypto.generate_master_key())
+    new_key = crypto.load_key_bytes(crypto.generate_master_key())
+    with pytest.raises(EncryptionError, match="asymmetric"):
+        core.rotate_text(enc, old_key, new_key)
+
+
+def test_rotate_text_wrong_old_key_raises():
+    old_key = crypto.load_key_bytes(crypto.generate_master_key())
+    wrong_key = crypto.load_key_bytes(crypto.generate_master_key())
+    new_key = crypto.load_key_bytes(crypto.generate_master_key())
+    enc = core.encrypt_text("FOO=bar\n", old_key)
+    with pytest.raises(KeyFingerprintMismatchError):
+        core.rotate_text(enc, wrong_key, new_key)

@@ -643,6 +643,36 @@ def test_set_on_missing_file(project, capsys):
     assert "error" in capsys.readouterr().err.lower()
 
 
+def test_set_rejects_key_with_dot(project, capsys):
+    (project / ".env").write_text("FOO=bar\n")
+    assert main(["init"]) == 0
+    assert main(["encrypt"]) == 0
+    assert main(["set", "DB.HOST=value"]) == 1
+    err = capsys.readouterr().err
+    assert "error" in err.lower()
+    assert "DB.HOST" in err
+
+
+def test_set_rejects_key_with_comma(project, capsys):
+    (project / ".env").write_text("FOO=bar\n")
+    assert main(["init"]) == 0
+    assert main(["encrypt"]) == 0
+    assert main(["set", "KEY,NAME=value"]) == 1
+    err = capsys.readouterr().err
+    assert "error" in err.lower()
+
+
+def test_set_invalid_key_error_message_matches_regex(project, capsys):
+    (project / ".env").write_text("FOO=bar\n")
+    assert main(["init"]) == 0
+    assert main(["encrypt"]) == 0
+    assert main(["set", "1INVALID=val"]) == 1
+    err = capsys.readouterr().err
+    # Error message must reflect the actual regex (no dot, no comma allowed).
+    assert "[A-Za-z0-9_]*" in err
+    assert "[A-Za-z0-9_.]*" not in err
+
+
 def test_set_asymmetric(project):
     prv, pub = crypto.generate_recipient_keypair()
     (project / ".env").write_text("TOKEN=old\n")
