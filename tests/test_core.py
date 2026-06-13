@@ -864,3 +864,20 @@ def test_reencrypt_text_with_comments_and_empty_body():
     assert result.startswith(core.BANNER)
     assert core.build_metadata_line(key) in result
     assert not parser.parse(result).entries()
+
+
+def test_parse_plaintext_policy_ignores_empty_regex_chunks():
+    keys, regexes = core.parse_plaintext_policy({core.PLAINTEXT_REGEX_TOKEN: ","})
+    assert regexes == []
+
+
+def test_encrypt_text_rejects_python_only_regex_syntax():
+    key = crypto.load_key_bytes(crypto.generate_master_key())
+    with pytest.raises(EncryptionError, match="Python-only syntax"):
+        core.encrypt_text("FOO=bar\n", key, plain_key_regex=["(?i)FOO"])
+
+
+def test_encrypt_text_rejects_invalid_regex():
+    key = crypto.load_key_bytes(crypto.generate_master_key())
+    with pytest.raises(EncryptionError, match="Invalid plain-key regex"):
+        core.encrypt_text("FOO=bar\n", key, plain_key_regex=["[invalid"])
