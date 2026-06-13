@@ -557,7 +557,7 @@ def cmd_set(args: argparse.Namespace) -> int:
         return 1
     key, _, value = args.assignment.partition("=")
     if not _KEY_RE.match(key):
-        _err(f"set: {key!r} is not a valid variable name (must match [A-Za-z_][A-Za-z0-9_.]*)")
+        _err(f"set: {key!r} is not a valid variable name (must match [A-Za-z_][A-Za-z0-9_]*)")
         return 1
     text = _read(args.file)
     search_dir = os.path.dirname(os.path.abspath(args.file))

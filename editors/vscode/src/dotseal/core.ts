@@ -83,15 +83,22 @@ function parsePlaintextPolicy(meta: Map<string, string>): {
     }
   }
 
-  const regexes = decodeRegexToken(meta.get(PLAINTEXT_REGEX_TOKEN) ?? "");
-  const compiled = regexes.map((pattern) => {
+  const rawRegexes = decodeRegexToken(meta.get(PLAINTEXT_REGEX_TOKEN) ?? "");
+  // Patterns come from the file footer written by the Python CLI. If a pattern
+  // uses Python-only regex syntax that JavaScript cannot compile, drop it from
+  // both the string list and the compiled list rather than crashing: the
+  // affected keys will be re-encrypted on the next save (fail-closed / more
+  // secure) and the file remains openable.
+  const regexes: string[] = [];
+  const compiled: RegExp[] = [];
+  for (const pattern of rawRegexes) {
     try {
-      return new RegExp(pattern);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      throw new EncryptionError(`Invalid plain-key regex in policy: ${JSON.stringify(pattern)} (${message})`);
+      compiled.push(new RegExp(`^(?:${pattern})$`));
+      regexes.push(pattern);
+    } catch {
+      // Python-only syntax (e.g. named groups) — drop; key gets encrypted.
     }
-  });
+  }
   return { plainKeys: keys, plainKeyRegex: regexes, plainKeyRegexCompiled: compiled };
 }
 
@@ -117,7 +124,7 @@ function resolvePlaintextPolicy(
       : (options.plainKeyRegex ?? []).filter((pattern) => pattern.length > 0);
   const plainKeyRegexCompiled = plainKeyRegex.map((pattern) => {
     try {
-      return new RegExp(pattern);
+      return new RegExp(`^(?:${pattern})$`);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       throw new EncryptionError(`Invalid plain-key regex in policy: ${JSON.stringify(pattern)} (${message})`);
@@ -134,10 +141,7 @@ function shouldEncryptValue(
   if (plainKeys.has(key)) {
     return false;
   }
-  return !plainKeyRegexCompiled.some((pattern) => {
-    const match = key.match(pattern);
-    return match !== null && match.index === 0 && match[0] === key;
-  });
+  return !plainKeyRegexCompiled.some((pattern) => pattern.test(key));
 }
 
 function metadataPolicySuffix(plainKeys: Set<string>, plainKeyRegex: string[]): string {
@@ -163,7 +167,7 @@ export function buildMetadataLine(
   for (const pattern of policy.plainKeyRegex) {
     try {
       // eslint-disable-next-line no-new
-      new RegExp(pattern);
+      new RegExp(`^(?:${pattern})$`);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       throw new EncryptionError(`Invalid plain-key regex in policy: ${JSON.stringify(pattern)} (${message})`);
