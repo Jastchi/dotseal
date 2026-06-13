@@ -5,7 +5,7 @@
 [![CodeQL](https://github.com/Jastchi/dotseal/actions/workflows/codeql.yml/badge.svg)](https://github.com/Jastchi/dotseal/actions/workflows/codeql.yml)
 [![codecov](https://codecov.io/github/Jastchi/dotseal/graph/badge.svg?token=N2N2FHGQBU)](https://codecov.io/github/Jastchi/dotseal)
 [![PyPI](https://img.shields.io/pypi/v/dotseal)](https://pypi.org/project/dotseal/)
-[![Python](https://img.shields.io/pypi/pyversions/dotseal)](https://pypi.org/project/dotseal/)
+[![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://pypi.org/project/dotseal/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 Git-friendly encrypted `.env` files with cleartext keys and sealed values.
