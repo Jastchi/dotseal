@@ -1,5 +1,9 @@
 # File Format
 
+dotseal files are valid `.env` text: variable **names** are always cleartext. Values
+are either sealed (`ENC[…]`) or left readable when covered by a selective encryption
+policy.
+
 ## Symmetric (`v=1`)
 
 ```env
@@ -14,6 +18,34 @@ DEBUG=ENC[AES_GCM,data:...]
 - The trailing `# dotseal:` metadata line records the algorithm and a **key fingerprint** (a one-way hash of the key). On decrypt, the fingerprint is checked first so a wrong key fails fast with a clear message instead of a cryptic crypto error.
 - Comments and blank lines are preserved. Values containing spaces, `#`, or newlines are safely quoted/escaped on decryption.
 
+### Selective encryption (`plain_keys`, `plain_re`)
+
+When `--plain-key` or `--plain-key-regex` is used, the footer may include optional
+policy tokens:
+
+```env
+PUBLIC=production
+FEATURE_DEBUG=true
+SECRET=ENC[AES_GCM,data:Zm9vYmFy...]
+# dotseal: v=1 alg=AES_GCM key_fp=7ef08b59e6a945e4 plain_keys=FEATURE_DEBUG,PUBLIC plain_re=UFVCTElDXy4r
+```
+
+| Token | Meaning |
+| --- | --- |
+| `plain_keys` | Comma-separated variable names stored unencrypted. Names are sorted alphabetically when written. |
+| `plain_re` | Comma-separated list of regex patterns. Each pattern is stored as **base64url** (UTF-8 pattern bytes). A key is plaintext when any pattern `fullmatch`es its name. |
+
+Rules:
+
+- A key is sealed unless it appears in `plain_keys` or matches any decoded `plain_re` pattern.
+- Omitted tokens mean "no names" / "no regexes" for that side of the policy.
+- Re-encrypting without `--plain-key` / `--plain-key-regex` CLI flags preserves the footer policy.
+- Passing only one CLI flag updates that side of the policy and keeps the other from the existing footer.
+
+**Security:** plaintext values are committed verbatim. They appear in git diffs, pull
+requests, and permanent history. This is by design for reviewable non-secrets (public
+endpoints, environment labels, feature flags). Do not mark actual secrets as plain.
+
 ## Asymmetric (`v=2`, multi-recipient)
 
 ```env
@@ -22,12 +54,13 @@ DATABASE_URL=ENC[AES_GCM,data:...]
 DEBUG=ENC[AES_GCM,data:...]
 # dotseal:recipient fp=<fp> ephem=<base64 ephemeral pubkey> enc=<base64 wrapped DEK>
 # dotseal:recipient fp=<fp> ephem=<base64 ephemeral pubkey> enc=<base64 wrapped DEK>
-# dotseal: v=2 alg=AES_GCM+X25519
+# dotseal: v=2 alg=AES_GCM+X25519 plain_keys=DEBUG
 ```
 
 - Values are encrypted **once** with a shared data key (DEK), so the body is identical regardless of how many recipients there are.
 - Each `# dotseal:recipient` line is the DEK wrapped for one recipient: `fp` is that recipient's public-key fingerprint, `ephem` is the per-wrap ephemeral X25519 public key, and `enc` is `base64(nonce ‖ AES-GCM(wrapped DEK))`.
 - The footer's `alg=AES_GCM+X25519` / `v=2` is how dotseal auto-detects the mode on decrypt.
+- `plain_keys` and `plain_re` use the same semantics as symmetric mode and are preserved across `add-recipient` / `rm-recipient`.
 
 ## See also
 
