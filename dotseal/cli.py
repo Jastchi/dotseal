@@ -21,7 +21,7 @@ import sys
 import tempfile
 from typing import List, Optional
 
-from . import __version__, core, crypto
+from . import __version__, core, crypto, parser
 from .exceptions import DotsealError
 
 _GITIGNORE_NOTE = "# Added by `dotseal init` -- never commit your master key"
@@ -38,6 +38,61 @@ def _read(path: str) -> str:
 
 def _err(msg: str) -> None:
     print(f"dotseal: error: {msg}", file=sys.stderr)
+
+
+def _warn(msg: str) -> None:
+    print(f"dotseal: warning: {msg}", file=sys.stderr)
+
+
+def _warn_plain_keys_already_encrypted(
+    text: str,
+    plain_keys: Optional[List[str]],
+) -> None:
+    """Warn when --plain-key names a value that is already ENC[...].
+
+    encrypt_text is idempotent on ciphertext, so the value won't be unsealed
+    by this run — only the footer policy changes.  Without this warning the
+    user might not realise that the next `dotseal edit` will write that value
+    as cleartext once the footer policy is inherited.
+    """
+    if not plain_keys:
+        return
+    parsed = parser.parse(text)
+    already_enc = sorted(
+        k for k in plain_keys
+        if any(
+            r.kind == "entry" and r.key == k and crypto.is_encrypted_value(r.value)
+            for r in parsed.records
+        )
+    )
+    if already_enc:
+        _warn(
+            "--plain-key has no effect on already-encrypted values: "
+            + ", ".join(already_enc)
+            + "; use 'dotseal edit --plain-key' to unseal"
+        )
+
+
+def _warn_policy_override(
+    original_text: str,
+    cleartext: str,
+    *,
+    plain_keys: Optional[List[str]],
+    plain_key_regex: Optional[List[str]],
+) -> None:
+    if plain_keys is None and plain_key_regex is None:
+        return
+    keys = core.keys_newly_sealed_by_policy_override(
+        parser.parse(original_text),
+        parser.parse(cleartext),
+        plain_keys=plain_keys,
+        plain_key_regex=plain_key_regex,
+    )
+    if keys:
+        _warn(
+            "policy override will seal previously plaintext keys: "
+            + ", ".join(keys)
+        )
 
 
 def _resolve_key_bytes(args: argparse.Namespace, *, search_dir: str) -> bytes:
@@ -200,12 +255,31 @@ def cmd_encrypt(args: argparse.Namespace) -> int:
     text = _read(args.input)
     search_dir = os.path.dirname(os.path.abspath(args.input))
     recipients = _collect_recipients(args)
+    plain_keys = getattr(args, "plain_key", None)
+    plain_key_regex = getattr(args, "plain_key_regex", None)
+    _warn_policy_override(
+        text,
+        text,
+        plain_keys=plain_keys,
+        plain_key_regex=plain_key_regex,
+    )
+    _warn_plain_keys_already_encrypted(text, plain_keys)
 
     if recipients:
-        out = core.encrypt_text_asymmetric(text, recipients)
+        out = core.encrypt_text_asymmetric(
+            text,
+            recipients,
+            plain_keys=plain_keys,
+            plain_key_regex=plain_key_regex,
+        )
         mode_note = f"{len(recipients)} recipient(s)"
     else:
-        out = core.encrypt_text(text, _resolve_key_bytes(args, search_dir=search_dir))
+        out = core.encrypt_text(
+            text,
+            _resolve_key_bytes(args, search_dir=search_dir),
+            plain_keys=plain_keys,
+            plain_key_regex=plain_key_regex,
+        )
         mode_note = "symmetric"
 
     # .env.enc is safe to commit -> default permissions are fine.
@@ -293,20 +367,52 @@ def cmd_edit(args: argparse.Namespace) -> int:
                     print(f"No changes; {args.input} was not created.")
                 return 0
 
+            plain_keys = getattr(args, "plain_key", None)
+            plain_key_regex = getattr(args, "plain_key_regex", None)
+            if original_text is not None:
+                _warn_policy_override(
+                    original_text,
+                    edited,
+                    plain_keys=plain_keys,
+                    plain_key_regex=plain_key_regex,
+                )
+
             try:
                 if is_asym and original_text is not None:
                     # Re-encrypt reusing the original DEK + recipients (only our key needed).
                     private_key = _resolve_private_key(args, search_dir=search_dir)
-                    out = core.reencrypt_text_asymmetric(edited, private_key, original_text)
+                    out = core.reencrypt_text_asymmetric(
+                        edited,
+                        private_key,
+                        original_text,
+                        plain_keys=plain_keys,
+                        plain_key_regex=plain_key_regex,
+                    )
                 elif is_asym:
-                    out = core.encrypt_text_asymmetric(edited, recipients)
+                    out = core.encrypt_text_asymmetric(
+                        edited,
+                        recipients,
+                        plain_keys=plain_keys,
+                        plain_key_regex=plain_key_regex,
+                    )
                 else:
                     key_bytes = _resolve_key_bytes(args, search_dir=search_dir)
                     if original_text is not None:
                         # Unchanged values keep their ciphertext (diff-friendly).
-                        out = core.reencrypt_text(edited, key_bytes, original_text)
+                        out = core.reencrypt_text(
+                            edited,
+                            key_bytes,
+                            original_text,
+                            plain_keys=plain_keys,
+                            plain_key_regex=plain_key_regex,
+                        )
                     else:
-                        out = core.encrypt_text(edited, key_bytes)
+                        out = core.encrypt_text(
+                            edited,
+                            key_bytes,
+                            plain_keys=plain_keys,
+                            plain_key_regex=plain_key_regex,
+                        )
                 break
             except DotsealError as exc:
                 # Never throw the user's edits away over a typo: offer to
@@ -402,6 +508,20 @@ def build_parser() -> argparse.ArgumentParser:
             help="File listing one recipient public key per line (# comments allowed).",
         )
 
+    def add_selective_encryption_args(p: argparse.ArgumentParser) -> None:
+        p.add_argument(
+            "--plain-key",
+            action="append",
+            metavar="KEY",
+            help="Keep this key unencrypted (repeatable).",
+        )
+        p.add_argument(
+            "--plain-key-regex",
+            action="append",
+            metavar="REGEX",
+            help="Keep keys matching this regex unencrypted (repeatable, fullmatch).",
+        )
+
     sub = parser.add_subparsers(dest="command", required=True)
 
     p_init = sub.add_parser("init", help="Generate a master key and gitignore it (symmetric).")
@@ -427,6 +547,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_enc.add_argument("output", nargs="?", default=".env.enc")
     add_key_args(p_enc)
     add_recipient_args(p_enc)
+    add_selective_encryption_args(p_enc)
     p_enc.set_defaults(func=cmd_encrypt)
 
     p_dec = sub.add_parser("decrypt", help="Decrypt .env.enc into a cleartext .env (auto-detects mode).")
@@ -441,6 +562,7 @@ def build_parser() -> argparse.ArgumentParser:
     add_key_args(p_edit)
     add_private_key_args(p_edit)
     add_recipient_args(p_edit)
+    add_selective_encryption_args(p_edit)
     p_edit.set_defaults(func=cmd_edit)
 
     p_add = sub.add_parser(

@@ -57,6 +57,22 @@
           "default": "",
           "description": "Optional base64 dotseal master key. Only honored from USER settings — values in workspace settings are ignored, because workspace settings are typically committed to git. Prefer DOTSEAL_MASTER_KEY or .dotseal.key instead of storing secrets in editor settings.",
           "scope": "application"
+        },
+        "dotseal.plaintextKeys": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "Exact variable names to keep unencrypted when the virtual editor creates a new encrypted env file (first save only). Existing files keep the policy stored in their footer; use the CLI to change policy later."
+        },
+        "dotseal.plaintextKeyRegex": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "Regex patterns; keys that fully match are kept unencrypted when the virtual editor creates a new encrypted env file (first save only). Existing files keep the policy stored in their footer; use the CLI to change policy later."
         }
       }
     }

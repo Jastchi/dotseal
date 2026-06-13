@@ -201,6 +201,77 @@ def test_cli_add_and_rm_recipient(project):
     assert main(["decrypt", ".env.enc", "bob_out2.env", "--private-key-file", "bob.prv"]) == 1
 
 
+def test_cli_encrypt_asymmetric_with_plain_key(project):
+    assert main(["keygen", "--out", "alice.prv"]) == 0
+    alice_pub = crypto.public_key_str_from_private(
+        (project / "alice.prv").read_text().strip()
+    )
+    (project / ".env").write_text("PUBLIC=ok\nSECRET=shh\n")
+    assert main(["encrypt", "-r", alice_pub, "--plain-key", "PUBLIC"]) == 0
+    enc = (project / ".env.enc").read_text()
+    assert "PUBLIC=ok" in enc
+    assert "SECRET=ENC[AES_GCM,data:" in enc
+    assert "plain_keys=PUBLIC" in enc
+
+
+def test_cli_edit_asymmetric_seals_and_unseals_plain_keys(project, monkeypatch):
+    import sys
+
+    editor_script = project / "fake_editor.py"
+    editor_script.write_text(
+        "import sys\n"
+        "p = sys.argv[1]\n"
+        "text = open(p).read()\n"
+        "text = text.replace('FOO=old', 'FOO=new').replace('SECRET=old', 'SECRET=new')\n"
+        "open(p, 'w').write(text)\n"
+    )
+    monkeypatch.setenv("EDITOR", f"{sys.executable} {editor_script}")
+
+    assert main(["keygen", "--out", "alice.prv"]) == 0
+    alice_pub = crypto.public_key_str_from_private(
+        (project / "alice.prv").read_text().strip()
+    )
+    (project / ".env").write_text("FOO=old\nSECRET=old\n")
+    assert main(["encrypt", "-r", alice_pub, "--plain-key", "FOO"]) == 0
+
+    # Seal FOO by removing it from the plain-key set.
+    assert main(
+        [
+            "edit",
+            ".env.enc",
+            "--private-key-file",
+            "alice.prv",
+            "--plain-key",
+            "BAR",
+        ]
+    ) == 0
+    enc = (project / ".env.enc").read_text()
+    assert "FOO=ENC[AES_GCM,data:" in enc
+    assert "SECRET=ENC[AES_GCM,data:" in enc
+    assert "plain_keys=BAR" in enc
+
+    # Unseal SECRET by adding it to the plain-key set.
+    editor_script.write_text(
+        "import sys\n"
+        "p = sys.argv[1]\n"
+        "text = open(p).read().replace('SECRET=new', 'SECRET=plain')\n"
+        "open(p, 'w').write(text)\n"
+    )
+    assert main(
+        [
+            "edit",
+            ".env.enc",
+            "--private-key-file",
+            "alice.prv",
+            "--plain-key",
+            "SECRET",
+        ]
+    ) == 0
+    enc = (project / ".env.enc").read_text()
+    assert "SECRET=plain" in enc
+    assert "plain_keys=SECRET" in enc
+
+
 def test_cli_edit_preserves_recipients(project, monkeypatch):
     import sys
 

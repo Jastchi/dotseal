@@ -78,6 +78,27 @@ def test_encrypt_decrypt_roundtrip_via_cli(project):
     assert entries["QUOTED"] == "  spaced value  "
 
 
+def test_encrypt_with_plain_key_option(project):
+    (project / ".env").write_text("PUBLIC=ok\nSECRET=shh\n")
+    assert main(["init"]) == 0
+    assert main(["encrypt", "--plain-key", "PUBLIC"]) == 0
+    enc = (project / ".env.enc").read_text()
+    assert "PUBLIC=ok" in enc
+    assert "SECRET=ENC[AES_GCM,data:" in enc
+    assert "plain_keys=PUBLIC" in enc
+
+
+def test_encrypt_with_plain_key_regex_option(project):
+    (project / ".env").write_text("PUBLIC_A=1\nPUBLIC_B=2\nSECRET=3\n")
+    assert main(["init"]) == 0
+    assert main(["encrypt", "--plain-key-regex", "PUBLIC_.+"]) == 0
+    enc = (project / ".env.enc").read_text()
+    assert "PUBLIC_A=1" in enc
+    assert "PUBLIC_B=2" in enc
+    assert "SECRET=ENC[AES_GCM,data:" in enc
+    assert "plain_re=" in enc
+
+
 def test_decrypt_output_is_owner_only(project):
     (project / ".env").write_text("FOO=bar\n")
     assert main(["init"]) == 0
@@ -334,6 +355,87 @@ def test_edit_unchanged_values_keep_their_ciphertext(project, monkeypatch):
 
     assert after["KEEP"] == before["KEEP"]  # unchanged value: token reused
     assert after["CHANGE"] != before["CHANGE"]
+
+
+def test_edit_preserves_existing_plain_policy(project, monkeypatch):
+    editor_script = project / "fake_editor.py"
+    editor_script.write_text(
+        "import sys\n"
+        "p = sys.argv[1]\n"
+        "text = open(p).read().replace('PUBLIC=old', 'PUBLIC=new').replace('SECRET=old', 'SECRET=new')\n"
+        "open(p, 'w').write(text)\n"
+    )
+    monkeypatch.setenv("EDITOR", f"{sys.executable} {editor_script}")
+
+    (project / ".env").write_text("PUBLIC=old\nSECRET=old\n")
+    assert main(["init"]) == 0
+    assert main(["encrypt", "--plain-key", "PUBLIC"]) == 0
+    assert main(["edit"]) == 0
+    enc = (project / ".env.enc").read_text()
+    assert "PUBLIC=new" in enc
+    assert "SECRET=ENC[AES_GCM,data:" in enc
+    assert "plain_keys=PUBLIC" in enc
+
+
+def test_encrypt_warns_when_policy_override_seals_keys(project, capsys):
+    (project / ".env").write_text("FOO=old\nSECRET=old\n")
+    assert main(["init"]) == 0
+    assert main(["encrypt", "--plain-key", "FOO"]) == 0
+    assert main(["encrypt", ".env.enc", ".env.enc", "--plain-key", "BAR"]) == 0
+    err = capsys.readouterr().err
+    assert "warning: policy override will seal previously plaintext keys: FOO" in err
+    enc = (project / ".env.enc").read_text()
+    assert "FOO=ENC[AES_GCM,data:" in enc
+
+
+def test_encrypt_idempotent_expanding_plain_key_set_keeps_sealed_values(project, capsys):
+    (project / ".env").write_text("SECRET=shh\n")
+    assert main(["init"]) == 0
+    assert main(["encrypt"]) == 0
+    assert main(["encrypt", ".env.enc", ".env.enc", "--plain-key", "SECRET"]) == 0
+    enc = (project / ".env.enc").read_text()
+    # SECRET was already ENC[…] — the idempotency guard keeps it encrypted
+    # and must NOT write it to plain_keys (that would silently unseal it on
+    # the next edit).  A warning is emitted instead.
+    assert "plain_keys=" not in enc
+    assert "SECRET=ENC[AES_GCM,data:" in enc
+    assert "SECRET" in capsys.readouterr().err
+
+
+def test_encrypt_partial_override_footer_mismatches_enc_values(project, capsys):
+    (project / ".env").write_text("SECRET=shh\nPUBLIC=ok\n")
+    assert main(["init"]) == 0
+    assert main(["encrypt"]) == 0
+    assert main(
+        ["encrypt", ".env.enc", ".env.enc", "--plain-key", "SECRET", "--plain-key", "PUBLIC"]
+    ) == 0
+    enc = (project / ".env.enc").read_text()
+    # Both values are already ENC[…] — neither should appear in plain_keys.
+    assert "plain_keys=" not in enc
+    assert "SECRET=ENC[AES_GCM,data:" in enc
+    assert "PUBLIC=ENC[AES_GCM,data:" in enc
+    err = capsys.readouterr().err
+    assert "PUBLIC" in err and "SECRET" in err
+
+
+def test_edit_warns_when_policy_override_seals_keys(project, monkeypatch, capsys):
+    editor_script = project / "fake_editor.py"
+    editor_script.write_text(
+        "import sys\n"
+        "p = sys.argv[1]\n"
+        "text = open(p).read().replace('FOO=old', 'FOO=new')\n"
+        "open(p, 'w').write(text)\n"
+    )
+    monkeypatch.setenv("EDITOR", f"{sys.executable} {editor_script}")
+
+    (project / ".env").write_text("FOO=old\nSECRET=old\n")
+    assert main(["init"]) == 0
+    assert main(["encrypt", "--plain-key", "FOO"]) == 0
+    assert main(["edit", "--plain-key", "BAR"]) == 0
+    err = capsys.readouterr().err
+    assert "warning: policy override will seal previously plaintext keys: FOO" in err
+    enc = (project / ".env.enc").read_text()
+    assert "FOO=ENC[AES_GCM,data:" in enc
 
 
 # --- encrypt: refuses to brick a re-encrypted file ----------------------------

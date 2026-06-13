@@ -81,6 +81,7 @@ Use the docs as the source of truth for all details:
 - AES-256-GCM authenticated encryption with per-value nonces.
 - Variable names are bound as AAD, so ciphertext cannot be swapped across keys.
 - Integrity is per value (review `.env.enc` changes like code changes).
+- Selective encryption (`--plain-key`, `--plain-key-regex`) leaves chosen values readable in the committed file and in git history; use only for non-secrets.
 
 Report vulnerabilities privately via [SECURITY.md](https://github.com/Jastchi/dotseal/blob/main/SECURITY.md).
 
