@@ -57,7 +57,9 @@ from .exceptions import (
 )
 from .loader import load_env
 
-__version__ = "0.2.1"
+from importlib.metadata import version as _pkg_version
+
+__version__ = _pkg_version("dotseal")
 
 __all__ = [
     "__version__",
