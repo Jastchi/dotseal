@@ -90,12 +90,6 @@ dotseal rotate .env.enc \
 # They can still decrypt old commits where they were a recipient.
 ```
 
-### Asymmetric revocation note
-
-- `rm-recipient` removes the recipient slot from current file state.
-- It does not rotate the existing data key (DEK), so older git history may remain decryptable by removed recipients.
-- For full revocation, use `dotseal rotate` with `--recipients-file` after `rm-recipient`.
-
 ## Handling rules
 
 - Never commit `.dotseal.key` or `.dotseal.prv`.
@@ -106,4 +100,4 @@ dotseal rotate .env.enc \
 
 - [Usage and CLI](USAGE.md)
 - [Asymmetric Mode](ASYMMETRIC.md)
-- [Deployment](DEPLOYMENT.md)
+- [CI/CD](DEPLOYMENT.md)

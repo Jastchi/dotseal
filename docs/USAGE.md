@@ -3,7 +3,7 @@
 ## Install
 
 ```bash
-pip install dotseal
+pip install dotseal  # or: uv add dotseal
 ```
 
 Requires Python 3.9+.

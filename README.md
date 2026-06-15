@@ -10,22 +10,22 @@
 
 Git-friendly encrypted `.env` files with cleartext keys and sealed values.
 
-`dotseal` encrypts only variable values, so you can safely commit `.env.enc`, review diffs, and keep secrets out of git history.
-
 ```diff
+  DEBUG=false
+- API_KEY=ENC[AES_GCM,data:c2VjcmV0...]
++ API_KEY=ENC[AES_GCM,data:b3RoZXI=]
   DATABASE_URL=ENC[AES_GCM,data:Zm9vYmFy...]
-- DEBUG=ENC[AES_GCM,data:TXVzaWM=]
-+ DEBUG=ENC[AES_GCM,data:b3RoZXI=]
-  API_KEY=ENC[AES_GCM,data:c2VjcmV0...]
 ```
+
+`DEBUG` is left unencrypted using `--plain-key` — safe for non-sensitive values.
 
 ## Installation
 
 ```bash
-pip install dotseal
+pip install dotseal  # or: uv add dotseal
 ```
 
-Requires Python 3.9+. Using `uv`? `uv add dotseal`.
+Requires Python 3.9+.
 
 ## Quickstart
 
@@ -48,13 +48,6 @@ from dotseal import load_env
 load_env()  # reads .env.enc and injects decrypted values into os.environ
 ```
 
-## Not sure which mode to use?
-
-- Solo or small trusted setup: start with symmetric mode (`dotseal init` + `dotseal encrypt`).
-- Team sharing without distributing one shared secret: use asymmetric mode.
-- If you are unsure, start symmetric and switch later when sharing/revocation needs grow.
-- Details: [Asymmetric mode](https://github.com/Jastchi/dotseal/blob/main/docs/ASYMMETRIC.md), [Key management](https://github.com/Jastchi/dotseal/blob/main/docs/KEY_MANAGEMENT.md).
-
 ## What gets committed?
 
 | File | Commit it? | Why |
@@ -72,17 +65,17 @@ Use the docs as the source of truth for all details:
 - [Documentation index](https://github.com/Jastchi/dotseal/blob/main/docs/README.md)
 - [Usage and CLI](https://github.com/Jastchi/dotseal/blob/main/docs/USAGE.md)
 - [Key management and rotation](https://github.com/Jastchi/dotseal/blob/main/docs/KEY_MANAGEMENT.md)
-- [Asymmetric mode](https://github.com/Jastchi/dotseal/blob/main/docs/ASYMMETRIC.md)
-- [CI/CD and deployment](https://github.com/Jastchi/dotseal/blob/main/docs/DEPLOYMENT.md)
+- [Asymmetric mode](https://github.com/Jastchi/dotseal/blob/main/docs/ASYMMETRIC.md) — not sure which mode to use? Start symmetric; switch when you need team sharing or revocation.
+- [CI/CD](https://github.com/Jastchi/dotseal/blob/main/docs/DEPLOYMENT.md)
 - [On-disk file format](https://github.com/Jastchi/dotseal/blob/main/docs/FILE_FORMAT.md)
 - [Editor integration](https://github.com/Jastchi/dotseal/blob/main/docs/EDITORS.md)
 
 ## Security
 
+- Selective encryption (`--plain-key`, `--plain-key-regex`) leaves chosen values in cleartext in `.env.enc` and git history; use only for non-secrets.
 - AES-256-GCM authenticated encryption with per-value nonces.
 - Variable names are bound as AAD, so ciphertext cannot be swapped across keys.
-- Integrity is per value (review `.env.enc` changes like code changes).
-- Selective encryption (`--plain-key`, `--plain-key-regex`) leaves chosen values readable in the committed file and in git history; use only for non-secrets.
+- Integrity is per value — review `.env.enc` changes like code changes.
 
 Report vulnerabilities privately via [SECURITY.md](https://github.com/Jastchi/dotseal/blob/main/SECURITY.md).
 

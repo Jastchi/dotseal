@@ -1,4 +1,4 @@
-# CI/CD Integration
+# CI/CD
 
 Commit only `.env.enc`, inject key material from your platform's secret store, and either decrypt to a file or load at runtime.
 
