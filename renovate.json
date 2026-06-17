@@ -26,7 +26,9 @@
   "automergeType": "pr",
   "automergeStrategy": "squash",
   "platformAutomerge": true,
+  "schedule": ["every 2 weeks on monday"],
   "minimumReleaseAge": "7 days",
+  "rebaseWhen": "conflicted",
   "internalChecksFilter": "strict",
   "prCreation": "not-pending",
   "packageRules": [
@@ -61,19 +63,17 @@
       "groupName": "Python major updates"
     },
     {
-      "description": "Group all non-major GitHub Actions updates into one PR and automerge. Bi-weekly schedule prevents volatile actions from continuously rebasing the PR and resetting the 7-day stability timer.",
+      "description": "Group all non-major GitHub Actions updates into one PR and automerge.",
       "matchManagers": ["github-actions"],
       "matchUpdateTypes": ["minor", "patch", "digest"],
       "groupName": "GitHub Actions dependencies",
-      "schedule": ["every 2 weeks on monday"],
       "automerge": true
     },
     {
-      "description": "Group all GitHub Actions major updates into one PR — no automerge. Bi-weekly schedule for consistency with the non-major rule.",
+      "description": "Group all GitHub Actions major updates into one PR — no automerge.",
       "matchManagers": ["github-actions"],
       "matchUpdateTypes": ["major"],
-      "groupName": "GitHub Actions major updates",
-      "schedule": ["every 2 weeks on monday"]
+      "groupName": "GitHub Actions major updates"
     },
     {
       "description": "ruff and ty: allow pre-release versioning so updates are never suppressed. The global 7-day minimumReleaseAge still applies; vulnerabilityAlerts overrides it to immediate for security fixes.",
