@@ -31,7 +31,7 @@ dependencies = [
     # A range, not an exact pin: dotseal is a library, and an == pin forces
     # version conflicts onto every consumer (and breaks universal resolution
     # for requires-python >= 3.9).
-    "cryptography>=42,<49",
+    "cryptography>=49,<50",
 ]
 
 [project.urls]
