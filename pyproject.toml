@@ -31,7 +31,7 @@ dependencies = [
     # A range, not an exact pin: dotseal is a library, and an == pin forces
     # version conflicts onto every consumer (and breaks universal resolution
     # for requires-python >= 3.9).
-    "cryptography>=42,<49",
+    "cryptography>=42",
 ]
 
 [project.urls]
@@ -42,7 +42,7 @@ Changelog = "https://github.com/Jastchi/dotseal/releases"
 [project.optional-dependencies]
 dev = [
     "pytest==8.4.2; python_version < '3.10'",  # renovate: ignore
-    "pytest==9.0.3; python_version >= '3.10'",
+    "pytest==9.1.1; python_version >= '3.10'",
     "pytest-cov",
     "ruff==0.15.16",
     "ty==0.0.47",
