@@ -8,10 +8,7 @@ on:
       - "tests/**"
       - "pyproject.toml"
   pull_request:
-    paths:
-      - "dotseal/**"
-      - "tests/**"
-      - "pyproject.toml"
+  workflow_dispatch:
 
 permissions:
   contents: read

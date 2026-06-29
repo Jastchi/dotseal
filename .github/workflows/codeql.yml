@@ -9,13 +9,9 @@ on:
       - "editors/vscode/**"
       - "pyproject.toml"
   pull_request:
-    paths:
-      - "dotseal/**"
-      - "tests/**"
-      - "editors/vscode/**"
-      - "pyproject.toml"
   schedule:
     - cron: "25 6 * * 1"
+  workflow_dispatch:
 
 permissions:
   actions: read

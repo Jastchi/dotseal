@@ -8,10 +8,7 @@ on:
       - "dotseal/**"
       - "pyproject.toml"
   pull_request:
-    paths:
-      - "editors/vscode/**"
-      - "dotseal/**"
-      - "pyproject.toml"
+  workflow_dispatch:
 
 permissions:
   contents: read

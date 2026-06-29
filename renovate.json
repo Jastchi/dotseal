@@ -39,6 +39,12 @@
       "enabled": false
     },
     {
+      "description": "Freeze the Python <3.10 pytest pin at 8.x — pytest 9+ requires Python >=3.10 and cannot be installed there.",
+      "matchPackageNames": ["pytest"],
+      "matchCurrentVersion": ">=8.0.0 <9.0.0",
+      "enabled": false
+    },
+    {
       "description": "Runtime dependencies of the library keep version RANGES (the global pep621 rangeStrategy=pin is for dev/optional deps only): dotseal is a library, and exact pins in [project.dependencies] force version conflicts onto every consumer. update-lockfile bumps uv.lock for in-range releases and only touches the range when an update falls outside it.",
       "matchManagers": ["pep621"],
       "matchDepTypes": ["project.dependencies"],
