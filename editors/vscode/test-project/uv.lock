@@ -102,14 +102,14 @@ wheels = [
 
 [[package]]
 name = "dotseal"
-version = "0.1.0"
+version = "0.3.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "cryptography" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/da/0c/a72b5e1bc5f3d181cc1bb95abd7f7d761483b30f5558eaf7a6e7c36acdea/dotseal-0.1.0.tar.gz", hash = "sha256:96f74a4e4abde1f8c270f8c2d9cc784981e9628b8e63b8948cacef233f838e13", size = 58356, upload-time = "2026-06-10T16:52:52.944Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/86/1e/dd31699dcc0dc11755fcacffce3aea330eba56df7de22d906d92bb8d0474/dotseal-0.3.0.tar.gz", hash = "sha256:1dfb6019cbcfdfcdff13f8178d2cda72b5645c7f5070a84f37ecb5c1919c260a", size = 722641, upload-time = "2026-06-13T11:11:45.135Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/e3/fd/974784c72b2cb24137bc8517e79141adeefc1275a7b80404d6fdd62a36f3/dotseal-0.1.0-py3-none-any.whl", hash = "sha256:71d46880e10098e56fe92b5ba2c26989c74deaf783c3e3fd0e05534e0dd0cdf5", size = 19356, upload-time = "2026-06-10T16:52:54.149Z" },
+    { url = "https://files.pythonhosted.org/packages/4a/af/7bedd042bb4a76403ad6feefa3b8a91b6e372e8e536d2b44614fa3f56e9c/dotseal-0.3.0-py3-none-any.whl", hash = "sha256:dd0302742955ca957b04bb9f87dbe8791a2c63d6f0000116d84353c2b0e944e8", size = 31454, upload-time = "2026-06-13T11:11:43.928Z" },
 ]
 
 [[package]]
