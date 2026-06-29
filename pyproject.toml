@@ -4,7 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "dotseal"
-version = "0.3.0"
+# Bumped dynamically from the git tag during release — see .github/workflows/publish.yml
+version = "0.0.0"
 description = "Git-friendly encrypted .env files with cleartext keys and sealed values (SOPS-inspired structural encryption)."
 readme = "README.md"
 requires-python = ">=3.9"
