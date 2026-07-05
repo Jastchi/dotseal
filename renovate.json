@@ -1,44 +1,12 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "extends": [
-    "config:recommended"
-  ],
+  "extends": ["github>Jastchi/renovate-configs//base.json"],
   "enabledManagers": ["pep621", "github-actions"],
   "ignorePaths": ["editors/vscode/test-project/**"],
-  "osvVulnerabilityAlerts": true,
-  "vulnerabilityAlerts": {
-    "enabled": true,
-    "automerge": true,
-    "minimumReleaseAge": "0 days",
-    "prCreation": "immediate",
-    "internalChecksFilter": "none"
-  },
-  "pep621": {
-    "rangeStrategy": "pin"
-  },
-  "github-actions": {
-    "pinDigests": true
-  },
   "lockFileMaintenance": {
-    "enabled": true,
-    "automerge": true,
-    "schedule": ["every 2 weeks on monday"]
+    "enabled": true
   },
-  "automergeType": "pr",
-  "automergeStrategy": "squash",
-  "platformAutomerge": true,
-  "schedule": ["every 2 weeks on monday"],
-  "minimumReleaseAge": "7 days",
-  "updateNotScheduled": false,
-  "rebaseWhen": "conflicted",
-  "internalChecksFilter": "strict",
-  "prCreation": "not-pending",
   "packageRules": [
-    {
-      "description": "Never update requires-python; Python version is managed manually.",
-      "matchDepTypes": ["requires-python"],
-      "enabled": false
-    },
     {
       "description": "Freeze the Python <3.10 pytest pin at 8.x — pytest 9+ requires Python >=3.10 and cannot be installed there.",
       "matchPackageNames": ["pytest"],
@@ -52,42 +20,9 @@
       "rangeStrategy": "update-lockfile"
     },
     {
-      "description": "Don't gate one-time pin/pinDigest operations on minimumReleaseAge. The value being pinned is what's currently in use, so the 7-day window adds no safety here. Without this, grouped pin PRs can get stuck pending forever because at least one dependency in the group typically has a release within the last 7 days.",
-      "matchUpdateTypes": ["pin", "pinDigest"],
-      "minimumReleaseAge": "0 days"
-    },
-    {
-      "description": "Group all non-major Python (PEP 621) updates into one PR and automerge. Excludes ruff and ty which are managed separately. rangeStrategy=pin ensures uv installs the exact version Renovate chose, preventing resolver drift that would bypass minimumReleaseAge.",
-      "matchManagers": ["pep621"],
-      "matchUpdateTypes": ["minor", "patch", "digest"],
-      "matchPackageNames": ["!ruff", "!ty"],
-      "groupName": "Python dependencies",
-      "automerge": true
-    },
-    {
-      "description": "Group all Python (PEP 621) major updates into one PR — no automerge.",
-      "matchManagers": ["pep621"],
-      "matchUpdateTypes": ["major"],
-      "groupName": "Python major updates"
-    },
-    {
-      "description": "Group all non-major GitHub Actions updates into one PR and automerge.",
-      "matchManagers": ["github-actions"],
-      "matchUpdateTypes": ["minor", "patch", "digest"],
-      "groupName": "GitHub Actions dependencies",
-      "automerge": true
-    },
-    {
-      "description": "Group all GitHub Actions major updates into one PR — no automerge.",
-      "matchManagers": ["github-actions"],
-      "matchUpdateTypes": ["major"],
-      "groupName": "GitHub Actions major updates"
-    },
-    {
-      "description": "ruff and ty: allow pre-release versioning so updates are never suppressed. The global 7-day minimumReleaseAge still applies; vulnerabilityAlerts overrides it to immediate for security fixes.",
+      "description": "ruff and ty: allow pre-release versioning so updates are never suppressed. The global 7-day minimumReleaseAge still applies.",
       "matchPackageNames": ["ruff", "ty"],
       "ignoreUnstable": false,
-      "automerge": true,
       "groupName": "dev tools"
     }
   ]
