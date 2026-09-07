@@ -45,8 +45,8 @@ dev = [
     "pytest==8.4.2; python_version < '3.10'",  # renovate: ignore
     "pytest==9.1.1; python_version >= '3.10'",
     "pytest-cov",
-    "ruff==0.15.16",
-    "ty==0.0.47",
+    "ruff==0.16.5",
+    "ty==0.0.76",
 ]
 
 [project.scripts]
