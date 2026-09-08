@@ -21,7 +21,9 @@ def test_load_key_bytes_roundtrip():
     assert crypto.load_key_bytes(key) == base64.b64decode(key)
 
 
-@pytest.mark.parametrize("bad", ["", "   ", "not-base64!!!", base64.b64encode(b"short").decode()])
+@pytest.mark.parametrize(
+    "bad", ["", "   ", "not-base64!!!", base64.b64encode(b"short").decode()]
+)
 def test_load_key_bytes_rejects_invalid(bad):
     with pytest.raises(InvalidMasterKeyError):
         crypto.load_key_bytes(bad)
@@ -94,14 +96,16 @@ def test_tampered_ciphertext_fails():
     key = crypto.load_key_bytes(crypto.generate_master_key())
     token = crypto.encrypt_value(key, "secret", aad="K")
     # flip a character inside the payload
-    payload = token[len(crypto.ENC_PREFIX):-1]
+    payload = token[len(crypto.ENC_PREFIX) : -1]
     flipped = ("A" if payload[0] != "A" else "B") + payload[1:]
     tampered = f"{crypto.ENC_PREFIX}{flipped}]"
     with pytest.raises(DecryptionError):
         crypto.decrypt_value(key, tampered, aad="K")
 
 
-@pytest.mark.parametrize("value", ["", "!!@#$%=", "héllo wörld", "a" * 5000, "line1\nline2"])
+@pytest.mark.parametrize(
+    "value", ["", "!!@#$%=", "héllo wörld", "a" * 5000, "line1\nline2"]
+)
 def test_roundtrip_edge_values(value):
     key = crypto.load_key_bytes(crypto.generate_master_key())
     token = crypto.encrypt_value(key, value, aad="K")
@@ -110,13 +114,14 @@ def test_roundtrip_edge_values(value):
 
 # --- Asymmetric (X25519 recipient) primitives -------------------------------
 
+
 def test_generate_recipient_keypair_format():
     priv, pub = crypto.generate_recipient_keypair()
     assert priv.startswith(crypto.PRIVKEY_PREFIX)
     assert pub.startswith(crypto.PUBKEY_PREFIX)
     # both halves decode to 32 raw bytes
-    assert len(base64.b64decode(priv[len(crypto.PRIVKEY_PREFIX):])) == 32
-    assert len(base64.b64decode(pub[len(crypto.PUBKEY_PREFIX):])) == 32
+    assert len(base64.b64decode(priv[len(crypto.PRIVKEY_PREFIX) :])) == 32
+    assert len(base64.b64decode(pub[len(crypto.PUBKEY_PREFIX) :])) == 32
 
 
 def test_public_key_str_from_private_matches_generated():
@@ -174,6 +179,7 @@ def test_unwrap_with_wrong_key_fails():
 
 def test_load_key_bytes_rejects_non_string():
     from typing import Any
+
     bad: Any = 12345
     with pytest.raises(InvalidMasterKeyError):
         crypto.load_key_bytes(bad)
@@ -181,6 +187,7 @@ def test_load_key_bytes_rejects_non_string():
 
 def test_load_recipient_public_rejects_non_string():
     from typing import Any
+
     bad: Any = 42
     with pytest.raises(InvalidRecipientKeyError):
         crypto.load_recipient_public_key(bad)
@@ -188,6 +195,7 @@ def test_load_recipient_public_rejects_non_string():
 
 def test_load_recipient_public_rejects_wrong_length():
     import base64
+
     short = crypto.PUBKEY_PREFIX + base64.b64encode(b"tooshort").decode()
     with pytest.raises(InvalidRecipientKeyError):
         crypto.load_recipient_public_key(short)
@@ -209,6 +217,7 @@ def test_decrypt_value_rejects_invalid_base64_payload():
 def test_decrypt_value_rejects_too_short_blob():
     key = crypto.load_key_bytes(crypto.generate_master_key())
     import base64
+
     short = base64.b64encode(b"tooshort").decode()
     bad = f"{crypto.ENC_PREFIX}{short}{crypto.ENC_SUFFIX}"
     with pytest.raises(DecryptionError):
@@ -218,15 +227,20 @@ def test_decrypt_value_rejects_too_short_blob():
 def test_unwrap_dek_rejects_invalid_base64():
     priv, _ = crypto.generate_recipient_keypair()
     with pytest.raises(DecryptionError):
-        crypto.unwrap_dek(crypto.load_recipient_private_key(priv), "not!base64", "also!bad")
+        crypto.unwrap_dek(
+            crypto.load_recipient_private_key(priv), "not!base64", "also!bad"
+        )
 
 
 def test_unwrap_dek_rejects_wrong_field_lengths():
     import base64
+
     priv, _ = crypto.generate_recipient_keypair()
     # ephem_pub_raw with wrong length (not 32 bytes)
     bad_ephem = base64.b64encode(b"tooshort").decode()
     _, pub = crypto.generate_recipient_keypair()
-    _, valid_enc = crypto.wrap_dek(crypto.load_recipient_public_key(pub), crypto.generate_data_key())
+    _, valid_enc = crypto.wrap_dek(
+        crypto.load_recipient_public_key(pub), crypto.generate_data_key()
+    )
     with pytest.raises(DecryptionError):
         crypto.unwrap_dek(crypto.load_recipient_private_key(priv), bad_ephem, valid_enc)

@@ -149,7 +149,9 @@ def test_collect_recipients_from_file(project, capsys):
     assert main(["encrypt", "--recipients-file", str(recipients_file)]) == 0
     enc = (project / ".env.enc").read_text()
     assert core.file_mode(enc) == "asymmetric"
-    recipients = core.parse_recipients(__import__("dotseal.parser", fromlist=["parse"]).parse(enc))
+    recipients = core.parse_recipients(
+        __import__("dotseal.parser", fromlist=["parse"]).parse(enc)
+    )
     assert len(recipients) == 2
 
 
@@ -177,20 +179,26 @@ def test_keygen_out_outside_cwd_skips_gitignore(project, tmp_path):
 
 def test_secure_delete_survives_overwrite_oserror(tmp_path, monkeypatch):
     from dotseal.cli import _secure_delete
+
     path = str(tmp_path / "file.txt")
     with open(path, "w") as fh:
         fh.write("secret")
-    monkeypatch.setattr(os.path, "getsize", lambda p: (_ for _ in ()).throw(OSError("disk")))
+    monkeypatch.setattr(
+        os.path, "getsize", lambda p: (_ for _ in ()).throw(OSError("disk"))
+    )
     _secure_delete(path)  # must not raise; file should be unlinked
     assert not os.path.exists(path)
 
 
 def test_secure_delete_survives_unlink_oserror(tmp_path, monkeypatch):
     from dotseal.cli import _secure_delete
+
     path = str(tmp_path / "file.txt")
     with open(path, "w") as fh:
         fh.write("secret")
-    monkeypatch.setattr(os, "unlink", lambda p: (_ for _ in ()).throw(OSError("locked")))
+    monkeypatch.setattr(
+        os, "unlink", lambda p: (_ for _ in ()).throw(OSError("locked"))
+    )
     _secure_delete(path)  # must not raise
 
 
@@ -287,12 +295,16 @@ def test_edit_reencrypts_changes(project, monkeypatch):
     assert main(["decrypt", ".env.enc", "out.env"]) == 0
     from dotseal import parser
 
-    entries = {e.key: e.value for e in parser.parse((project / "out.env").read_text()).entries()}
+    entries = {
+        e.key: e.value
+        for e in parser.parse((project / "out.env").read_text()).entries()
+    }
     assert entries["DEBUG"] == "False"
     assert entries["NEW_KEY"] == "new_value"
 
 
 # --- edit: edits survive a re-encrypt failure ---------------------------------
+
 
 def test_edit_parse_error_preserves_edits(project, monkeypatch, capsys):
     import tempfile
@@ -349,9 +361,15 @@ def test_edit_unchanged_values_keep_their_ciphertext(project, monkeypatch):
     (project / ".env").write_text("KEEP=same\nCHANGE=old\n")
     assert main(["init"]) == 0
     assert main(["encrypt"]) == 0
-    before = {e.key: e.value for e in parser.parse((project / ".env.enc").read_text()).entries()}
+    before = {
+        e.key: e.value
+        for e in parser.parse((project / ".env.enc").read_text()).entries()
+    }
     assert main(["edit"]) == 0
-    after = {e.key: e.value for e in parser.parse((project / ".env.enc").read_text()).entries()}
+    after = {
+        e.key: e.value
+        for e in parser.parse((project / ".env.enc").read_text()).entries()
+    }
 
     assert after["KEEP"] == before["KEEP"]  # unchanged value: token reused
     assert after["CHANGE"] != before["CHANGE"]
@@ -388,7 +406,9 @@ def test_encrypt_warns_when_policy_override_seals_keys(project, capsys):
     assert "FOO=ENC[AES_GCM,data:" in enc
 
 
-def test_encrypt_idempotent_expanding_plain_key_set_keeps_sealed_values(project, capsys):
+def test_encrypt_idempotent_expanding_plain_key_set_keeps_sealed_values(
+    project, capsys
+):
     (project / ".env").write_text("SECRET=shh\n")
     assert main(["init"]) == 0
     assert main(["encrypt"]) == 0
@@ -406,9 +426,20 @@ def test_encrypt_partial_override_footer_mismatches_enc_values(project, capsys):
     (project / ".env").write_text("SECRET=shh\nPUBLIC=ok\n")
     assert main(["init"]) == 0
     assert main(["encrypt"]) == 0
-    assert main(
-        ["encrypt", ".env.enc", ".env.enc", "--plain-key", "SECRET", "--plain-key", "PUBLIC"]
-    ) == 0
+    assert (
+        main(
+            [
+                "encrypt",
+                ".env.enc",
+                ".env.enc",
+                "--plain-key",
+                "SECRET",
+                "--plain-key",
+                "PUBLIC",
+            ]
+        )
+        == 0
+    )
     enc = (project / ".env.enc").read_text()
     # Both values are already ENC[…] — neither should appear in plain_keys.
     assert "plain_keys=" not in enc
@@ -440,6 +471,7 @@ def test_edit_warns_when_policy_override_seals_keys(project, monkeypatch, capsys
 
 # --- encrypt: refuses to brick a re-encrypted file ----------------------------
 
+
 def test_encrypt_after_key_rotation_fails_loudly(project, capsys):
     (project / ".env").write_text("FOO=bar\n")
     assert main(["init"]) == 0
@@ -451,6 +483,7 @@ def test_encrypt_after_key_rotation_fails_loudly(project, capsys):
 
 
 # --- gitignore pattern awareness -----------------------------------------------
+
 
 def test_init_recognizes_covering_gitignore_pattern(project, capsys):
     (project / ".gitignore").write_text("*.key\n")
@@ -522,13 +555,17 @@ def test_edit_reopens_editor_after_reencrypt_failure(project, monkeypatch, capsy
     assert main(["decrypt", ".env.enc", "out.env"]) == 0
     from dotseal import parser
 
-    entries = {e.key: e.value for e in parser.parse((project / "out.env").read_text()).entries()}
+    entries = {
+        e.key: e.value
+        for e in parser.parse((project / "out.env").read_text()).entries()
+    }
     assert entries["DEBUG"] == "False"
     leftovers = [p for p in os.listdir(project) if p.startswith(".dotseal-edit-")]
     assert leftovers == []
 
 
 # --- get command -------------------------------------------------------------
+
 
 def test_get_existing_key(project, capsys):
     (project / ".env").write_text("FOO=secretval\n")
@@ -588,14 +625,19 @@ def test_get_asymmetric(project, capsys):
 
 # --- set command -------------------------------------------------------------
 
+
 def test_set_changes_existing_value(project, capsys):
     from dotseal import parser as _parser
+
     (project / ".env").write_text("FOO=old\n")
     assert main(["init"]) == 0
     assert main(["encrypt"]) == 0
     assert main(["set", "FOO=new"]) == 0
     assert main(["decrypt", ".env.enc", "out.env"]) == 0
-    entries = {e.key: e.value for e in _parser.parse((project / "out.env").read_text()).entries()}
+    entries = {
+        e.key: e.value
+        for e in _parser.parse((project / "out.env").read_text()).entries()
+    }
     assert entries["FOO"] == "new"
 
 
@@ -611,12 +653,19 @@ def test_set_adds_new_key(project, capsys):
 
 def test_set_unchanged_ciphertext_preserved(project):
     from dotseal import parser as _parser
+
     (project / ".env").write_text("KEEP=same\nCHANGE=old\n")
     assert main(["init"]) == 0
     assert main(["encrypt"]) == 0
-    before = {e.key: e.value for e in _parser.parse((project / ".env.enc").read_text()).entries()}
+    before = {
+        e.key: e.value
+        for e in _parser.parse((project / ".env.enc").read_text()).entries()
+    }
     assert main(["set", "CHANGE=new"]) == 0
-    after = {e.key: e.value for e in _parser.parse((project / ".env.enc").read_text()).entries()}
+    after = {
+        e.key: e.value
+        for e in _parser.parse((project / ".env.enc").read_text()).entries()
+    }
     assert after["KEEP"] == before["KEEP"]
     assert after["CHANGE"] != before["CHANGE"]
 

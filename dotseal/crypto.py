@@ -81,6 +81,7 @@ _DEK_WRAP_INFO = b"dotseal/dek-wrap/v1"
 
 # --- Helpers ----------------------------------------------------------------
 
+
 def _zero(buf: bytearray) -> None:
     """Best-effort overwrite of a mutable byte buffer.
 
@@ -93,6 +94,7 @@ def _zero(buf: bytearray) -> None:
 
 
 # --- Key management ---------------------------------------------------------
+
 
 def generate_master_key() -> str:
     """Generate a new cryptographically secure master key (base64 text)."""
@@ -140,6 +142,7 @@ def key_fingerprint(key_bytes: bytes) -> str:
 
 # --- Value encryption / decryption ------------------------------------------
 
+
 def is_encrypted_value(value: str) -> bool:
     """Return True if ``value`` is a well-formed ENC[...] token."""
     return value.startswith(ENC_PREFIX) and value.endswith(ENC_SUFFIX)
@@ -175,10 +178,8 @@ def decrypt_value(key_bytes: bytes, token: str, *, aad: str) -> str:
             (variable name) does not match, or the ciphertext was tampered with.
     """
     if not is_encrypted_value(token):
-        raise DecryptionError(
-            "Value is not a recognized ENC[AES_GCM,...] token."
-        )
-    payload_b64 = token[len(ENC_PREFIX):-len(ENC_SUFFIX)]
+        raise DecryptionError("Value is not a recognized ENC[AES_GCM,...] token.")
+    payload_b64 = token[len(ENC_PREFIX) : -len(ENC_SUFFIX)]
     try:
         blob = base64.b64decode(payload_b64, validate=True)
     except (binascii.Error, ValueError) as exc:
@@ -200,6 +201,7 @@ def decrypt_value(key_bytes: bytes, token: str, *, aad: str) -> str:
 
 # --- Asymmetric recipient keys (X25519) -------------------------------------
 
+
 def generate_recipient_keypair() -> tuple[str, str]:
     """Generate a fresh X25519 recipient key pair.
 
@@ -209,9 +211,7 @@ def generate_recipient_keypair() -> tuple[str, str]:
         must be kept secret.
     """
     private = X25519PrivateKey.generate()
-    priv_raw = private.private_bytes(
-        Encoding.Raw, PrivateFormat.Raw, NoEncryption()
-    )
+    priv_raw = private.private_bytes(Encoding.Raw, PrivateFormat.Raw, NoEncryption())
     pub_raw = private.public_key().public_bytes(Encoding.Raw, PublicFormat.Raw)
     priv_str = PRIVKEY_PREFIX + base64.b64encode(priv_raw).decode("ascii")
     pub_str = PUBKEY_PREFIX + base64.b64encode(pub_raw).decode("ascii")
@@ -228,11 +228,9 @@ def _decode_key_body(value: str, prefix: str, role: str) -> bytes:
             "Did you mix up the public and private halves?"
         )
     try:
-        raw = base64.b64decode(cleaned[len(prefix):], validate=True)
+        raw = base64.b64decode(cleaned[len(prefix) :], validate=True)
     except (binascii.Error, ValueError) as exc:
-        raise InvalidRecipientKeyError(
-            f"{role} key is not valid base64."
-        ) from exc
+        raise InvalidRecipientKeyError(f"{role} key is not valid base64.") from exc
     if len(raw) != KEY_SIZE:
         raise InvalidRecipientKeyError(
             f"{role} key must decode to {KEY_SIZE} bytes (got {len(raw)})."
@@ -272,6 +270,7 @@ def recipient_fingerprint(public_key: str) -> str:
 
 # --- DEK (data key) envelope ------------------------------------------------
 
+
 def generate_data_key() -> bytes:
     """Generate a fresh random 32-byte data key (DEK) for one file."""
     return os.urandom(KEY_SIZE)
@@ -299,12 +298,8 @@ def wrap_dek(recipient_public: X25519PublicKey, dek: bytes) -> tuple[str, str]:
         ephemeral public key lets the recipient reconstruct the shared secret.
     """
     ephemeral = X25519PrivateKey.generate()
-    ephem_pub_raw = ephemeral.public_key().public_bytes(
-        Encoding.Raw, PublicFormat.Raw
-    )
-    recipient_pub_raw = recipient_public.public_bytes(
-        Encoding.Raw, PublicFormat.Raw
-    )
+    ephem_pub_raw = ephemeral.public_key().public_bytes(Encoding.Raw, PublicFormat.Raw)
+    recipient_pub_raw = recipient_public.public_bytes(Encoding.Raw, PublicFormat.Raw)
     shared = ephemeral.exchange(recipient_public)
     wrap_key = _wrap_key(ephem_pub_raw, recipient_pub_raw, shared)
     nonce = os.urandom(NONCE_SIZE)

@@ -30,9 +30,15 @@ repos:
         language: system
         types: [python]
 
+      - id: ruff-format
+        name: ruff format
+        entry: uv run ruff format
+        language: system
+        types: [python]
+
       - id: ty
         name: ty check
-        entry: uv run ty check .
+        entry: uv run ty check . --error-on-warning
         language: system
         types: [python]
         pass_filenames: false
