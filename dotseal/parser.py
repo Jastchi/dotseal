@@ -114,7 +114,7 @@ def _split_value(raw: str) -> tuple[str, str]:
         quote = value[0]
         end = _find_closing_quote(value, quote)
         if end is not None:
-            rest = value[end + 1:]
+            rest = value[end + 1 :]
             rest_l = rest.lstrip()
             if rest_l == "" or rest_l.startswith("#"):
                 inner = value[1:end]
@@ -129,7 +129,7 @@ def _split_value(raw: str) -> tuple[str, str]:
         # fall through and treat the whole thing as an unquoted literal.
     match = _INLINE_COMMENT_RE.search(value)
     if match:
-        return value[: match.start()], value[match.start():]
+        return value[: match.start()], value[match.start() :]
     return value, ""
 
 
@@ -167,6 +167,7 @@ def format_value(value: str) -> str:
 
 # --- Parsing ----------------------------------------------------------------
 
+
 def parse(text: str) -> ParsedEnv:
     """Parse the full text of a ``.env``/``.env.enc`` file into records."""
     records: list[Record] = []
@@ -180,9 +181,7 @@ def parse(text: str) -> ParsedEnv:
             continue
         match = _ENTRY_RE.match(line)
         if not match:
-            raise ParseError(
-                f"Line {lineno}: could not parse entry: {line!r}"
-            )
+            raise ParseError(f"Line {lineno}: could not parse entry: {line!r}")
         key = match.group("key")
         value, comment = _split_value(match.group("value"))
         records.append(

@@ -20,8 +20,12 @@ def _write_enc(tmp_path, key_str, mapping):
     return str(path)
 
 
-def test_loader_injects_into_environ_without_writing_files(tmp_path, key_str, monkeypatch):
-    enc_path = _write_enc(tmp_path, key_str, {"DATABASE_URL": "postgres://x", "DEBUG": "True"})
+def test_loader_injects_into_environ_without_writing_files(
+    tmp_path, key_str, monkeypatch
+):
+    enc_path = _write_enc(
+        tmp_path, key_str, {"DATABASE_URL": "postgres://x", "DEBUG": "True"}
+    )
     monkeypatch.delenv("DATABASE_URL", raising=False)
     monkeypatch.delenv("DEBUG", raising=False)
 

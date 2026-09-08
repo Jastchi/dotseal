@@ -15,6 +15,7 @@ from dotseal.exceptions import (
 
 # --- find_key_file -----------------------------------------------------------
 
+
 def test_find_key_file_returns_none_when_absent(tmp_path):
     assert core.find_key_file(str(tmp_path)) is None
 
@@ -32,6 +33,7 @@ def test_find_key_file_walks_up_to_parent(tmp_path):
 
 
 # --- resolve_master_key ------------------------------------------------------
+
 
 def test_resolve_master_key_explicit_arg(monkeypatch):
     monkeypatch.delenv(core.ENV_VAR_NAME, raising=False)
@@ -75,6 +77,7 @@ def test_resolve_master_key_raises_when_nothing_found(tmp_path, monkeypatch):
 
 # --- find_private_key_file ---------------------------------------------------
 
+
 def test_find_private_key_file_returns_none_when_absent(tmp_path):
     assert core.find_private_key_file(str(tmp_path)) is None
 
@@ -96,6 +99,7 @@ def test_find_private_key_file_walks_up_to_parent(tmp_path):
 
 
 # --- resolve_private_key -----------------------------------------------------
+
 
 def test_resolve_private_key_explicit_arg(monkeypatch):
     monkeypatch.delenv(core.PRIVATE_ENV_VAR_NAME, raising=False)
@@ -133,6 +137,7 @@ def test_resolve_private_key_raises_when_nothing_found(tmp_path, monkeypatch):
 
 # --- parse_metadata / parse_recipients ---------------------------------------
 
+
 def test_parse_metadata_returns_empty_for_plain_file():
     parsed = parser.parse("FOO=bar\n")
     assert core.parse_metadata(parsed) == {}
@@ -157,6 +162,7 @@ def test_parse_recipients_skips_slots_missing_required_fields():
 
 # --- verify_key --------------------------------------------------------------
 
+
 def test_verify_key_raises_on_fingerprint_mismatch():
     key1 = crypto.load_key_bytes(crypto.generate_master_key())
     key2 = crypto.load_key_bytes(crypto.generate_master_key())
@@ -174,6 +180,7 @@ def test_verify_key_passes_when_no_fingerprint_present():
 
 # --- decrypt_to_dict ---------------------------------------------------------
 
+
 def test_decrypt_to_dict_returns_mapping():
     key = crypto.load_key_bytes(crypto.generate_master_key())
     enc = core.encrypt_text("FOO=bar\nBAZ=qux\n", key)
@@ -188,6 +195,7 @@ def test_decrypt_to_dict_handles_plain_values():
 
 
 # --- write_secret_file -------------------------------------------------------
+
 
 def test_write_secret_file_creates_with_correct_permissions(tmp_path):
     path = str(tmp_path / "secret.txt")
@@ -210,13 +218,16 @@ def test_write_secret_file_tightens_perms_on_preexisting_file(tmp_path):
 
 def test_write_secret_file_survives_chmod_oserror(tmp_path, monkeypatch):
     path = str(tmp_path / "secret.txt")
-    monkeypatch.setattr(os, "chmod", lambda *a: (_ for _ in ()).throw(OSError("no chmod")))
+    monkeypatch.setattr(
+        os, "chmod", lambda *a: (_ for _ in ()).throw(OSError("no chmod"))
+    )
     core.write_secret_file(path, "content")  # must not raise
     with open(path) as fh:
         assert fh.read() == "content"
 
 
 # --- parse_metadata / parse_recipients token edge cases ----------------------
+
 
 def test_parse_metadata_skips_tokens_without_equals():
     text = "FOO=bar\n# dotseal: v=1 badtoken alg=AES_GCM\n"
@@ -238,7 +249,9 @@ def test_file_mode_asymmetric_from_recipients_without_footer():
     _, pub = crypto.generate_recipient_keypair()
     enc = core.encrypt_text_asymmetric("FOO=bar\n", [pub])
     lines = [
-        line for line in enc.splitlines() if not line.strip().startswith("# dotseal: v=")
+        line
+        for line in enc.splitlines()
+        if not line.strip().startswith("# dotseal: v=")
     ]
     damaged = "\n".join(lines) + "\n"
     assert core.file_mode(damaged) == "asymmetric"
@@ -250,6 +263,7 @@ def test_parse_recipients_skips_tokens_without_equals():
     # Inject a malformed recipient line that still has the required fields but
     # also a bare token without "="; the slot should still be returned.
     from dotseal import parser as p
+
     parsed = p.parse(enc)
     for r in parsed.records:
         if r.kind == "comment" and r.raw.strip().startswith(core.RECIPIENT_PREFIX):
@@ -259,6 +273,7 @@ def test_parse_recipients_skips_tokens_without_equals():
 
 
 # --- encrypt_text idempotency and empty-body branch --------------------------
+
 
 def test_encrypt_text_idempotent():
     key = crypto.load_key_bytes(crypto.generate_master_key())
@@ -277,6 +292,7 @@ def test_encrypt_text_empty_body():
 
 # --- decrypt_text plain-value branch -----------------------------------------
 
+
 def test_decrypt_text_preserves_plain_values():
     key = crypto.load_key_bytes(crypto.generate_master_key())
     enc = core.encrypt_text("FOO=bar\nBAZ=qux\n", key)
@@ -294,6 +310,7 @@ def test_decrypt_text_preserves_plain_values():
 
 # --- asymmetric empty-body branch --------------------------------------------
 
+
 def test_encrypt_text_asymmetric_empty_body():
     _, pub = crypto.generate_recipient_keypair()
     result = core.encrypt_text_asymmetric("", [pub])
@@ -302,6 +319,7 @@ def test_encrypt_text_asymmetric_empty_body():
 
 
 # --- encrypt_text_asymmetric deduplication and idempotency -------------------
+
 
 def test_encrypt_text_asymmetric_deduplicates_recipients():
     _, pub = crypto.generate_recipient_keypair()
@@ -323,8 +341,10 @@ def test_encrypt_text_asymmetric_rejects_already_encrypted_value():
 
 # --- recover_data_key with no recipients -------------------------------------
 
+
 def test_recover_data_key_raises_for_no_recipients():
     from dotseal.exceptions import DecryptionError
+
     priv, _ = crypto.generate_recipient_keypair()
     parsed = parser.parse("FOO=bar\n")  # plain file, no recipients
     with pytest.raises(DecryptionError):
@@ -332,6 +352,7 @@ def test_recover_data_key_raises_for_no_recipients():
 
 
 # --- asymmetric decrypt plain-value branches ---------------------------------
+
 
 def _asym_file_with_plain_value() -> tuple:
     """Return (enc_with_plain_val, priv) where BAZ has a plain (non-ENC) value."""
@@ -361,6 +382,7 @@ def test_decrypt_to_dict_asymmetric_handles_plain_values():
 
 # --- reencrypt_text_asymmetric non-entry and already-encrypted branches ------
 
+
 def test_reencrypt_text_asymmetric_with_comments_and_blanks():
     priv, pub = crypto.generate_recipient_keypair()
     original = core.encrypt_text_asymmetric("FOO=bar\n", [pub])
@@ -379,6 +401,7 @@ def test_reencrypt_text_asymmetric_idempotent_values():
 
 # --- add_recipient idempotency -----------------------------------------------
 
+
 def test_add_recipient_already_present_is_idempotent():
     priv, pub = crypto.generate_recipient_keypair()
     enc = core.encrypt_text_asymmetric("FOO=bar\n", [pub])
@@ -388,8 +411,10 @@ def test_add_recipient_already_present_is_idempotent():
 
 # --- remove_recipient not-found raises ---------------------------------------
 
+
 def test_remove_recipient_not_found_raises():
     from dotseal.exceptions import RecipientNotFoundError
+
     _, pub_a = crypto.generate_recipient_keypair()
     _, pub_b = crypto.generate_recipient_keypair()
     enc = core.encrypt_text_asymmetric("FOO=bar\n", [pub_a])
@@ -398,6 +423,7 @@ def test_remove_recipient_not_found_raises():
 
 
 # --- re-encryption guards (issue: bricked files) ------------------------------
+
 
 def test_encrypt_text_with_wrong_key_raises_instead_of_bricking():
     from dotseal.exceptions import KeyFingerprintMismatchError as FpMismatch
@@ -509,15 +535,18 @@ def test_keys_newly_sealed_by_policy_override():
     assert core.keys_newly_sealed_by_policy_override(
         parser.parse(original), cleartext, plain_keys=["BAR"]
     ) == ["FOO"]
-    assert core.keys_newly_sealed_by_policy_override(
-        parser.parse(original), cleartext
-    ) == []
+    assert (
+        core.keys_newly_sealed_by_policy_override(parser.parse(original), cleartext)
+        == []
+    )
 
 
 def test_add_rm_recipient_preserves_metadata_policy():
     priv_a, pub_a = crypto.generate_recipient_keypair()
     _, pub_b = crypto.generate_recipient_keypair()
-    enc = core.encrypt_text_asymmetric("PUBLIC=ok\nSECRET=shh\n", [pub_a], plain_keys=["PUBLIC"])
+    enc = core.encrypt_text_asymmetric(
+        "PUBLIC=ok\nSECRET=shh\n", [pub_a], plain_keys=["PUBLIC"]
+    )
     with_b = core.add_recipient_to_text(enc, priv_a, pub_b)
     after_rm = core.remove_recipient_from_text(with_b, pub_b)
     meta = core.parse_metadata(parser.parse(after_rm))
@@ -528,6 +557,7 @@ def test_add_rm_recipient_preserves_metadata_policy():
 
 
 # --- key resolution precedence -------------------------------------------------
+
 
 def test_explicit_key_file_beats_env_var(tmp_path, monkeypatch):
     file_key = crypto.generate_master_key()
@@ -560,6 +590,7 @@ def test_explicit_missing_private_key_file_raises(tmp_path, monkeypatch):
 
 
 # --- reencrypt_text: unchanged ciphertexts are reused --------------------------
+
 
 def test_reencrypt_text_reuses_unchanged_ciphertexts():
     key = crypto.load_key_bytes(crypto.generate_master_key())
@@ -615,6 +646,7 @@ def test_reencrypt_text_asymmetric_reuses_unchanged_ciphertexts():
 
 
 # --- asymmetric plain-key policy ---------------------------------------------
+
 
 def test_encrypt_text_asymmetric_respects_plain_key_policy():
     _, pub = crypto.generate_recipient_keypair()
@@ -722,6 +754,7 @@ def test_reencrypt_text_asymmetric_unseals_added_plain_key():
 
 # --- encrypt idempotency / partial-override footguns -------------------------
 
+
 def test_encrypt_text_idempotent_expanding_plain_key_set_keeps_sealed_values():
     key = crypto.load_key_bytes(crypto.generate_master_key())
     enc = core.encrypt_text("SECRET=shh\n", key)
@@ -771,6 +804,7 @@ def test_encrypt_text_partial_plain_key_override_merges_regex_on_rerun():
 
 # --- write_secret_file hardening -----------------------------------------------
 
+
 def test_write_secret_file_replaces_loose_permissions(tmp_path):
     target = tmp_path / "out.env"
     target.write_text("old")
@@ -819,7 +853,9 @@ def test_write_secret_file_survives_unlink_error_during_cleanup(tmp_path, monkey
             raise OSError("unlink failed")
         return real_unlink(path)
 
-    monkeypatch.setattr(os, "replace", lambda *_: (_ for _ in ()).throw(OSError("replace failed")))
+    monkeypatch.setattr(
+        os, "replace", lambda *_: (_ for _ in ()).throw(OSError("replace failed"))
+    )
     monkeypatch.setattr(os, "unlink", fail_unlink_on_temp)
     with pytest.raises(OSError, match="replace failed"):
         core.write_secret_file(str(target), "secret")
@@ -885,6 +921,7 @@ def test_encrypt_text_rejects_invalid_regex():
 
 # --- get_value ---------------------------------------------------------------
 
+
 def test_get_value_symmetric_encrypted():
     key_bytes = crypto.load_key_bytes(crypto.generate_master_key())
     enc = core.encrypt_text("FOO=bar\nBAZ=qux\n", key_bytes)
@@ -894,12 +931,15 @@ def test_get_value_symmetric_encrypted():
 
 def test_get_value_plain_key():
     key_bytes = crypto.load_key_bytes(crypto.generate_master_key())
-    enc = core.encrypt_text("PUBLIC=open\nSECRET=shh\n", key_bytes, plain_keys=["PUBLIC"])
+    enc = core.encrypt_text(
+        "PUBLIC=open\nSECRET=shh\n", key_bytes, plain_keys=["PUBLIC"]
+    )
     assert core.get_value(enc, "PUBLIC", key_bytes=key_bytes) == "open"
 
 
 def test_get_value_missing_key_raises():
     from dotseal.exceptions import KeyNotFoundError
+
     key_bytes = crypto.load_key_bytes(crypto.generate_master_key())
     enc = core.encrypt_text("FOO=bar\n", key_bytes)
     with pytest.raises(KeyNotFoundError):
@@ -920,6 +960,7 @@ def test_get_value_asymmetric():
 
 def test_get_value_missing_key_symmetric_requires_key_bytes():
     from dotseal.exceptions import MasterKeyNotFoundError
+
     key_bytes = crypto.load_key_bytes(crypto.generate_master_key())
     enc = core.encrypt_text("FOO=bar\n", key_bytes)
     with pytest.raises(MasterKeyNotFoundError):
@@ -928,6 +969,7 @@ def test_get_value_missing_key_symmetric_requires_key_bytes():
 
 def test_get_value_asymmetric_requires_private_key():
     from dotseal.exceptions import PrivateKeyNotFoundError
+
     _, pub = crypto.generate_recipient_keypair()
     enc = core.encrypt_text_asymmetric("SECRET=hidden\n", [pub])
     with pytest.raises(PrivateKeyNotFoundError):
@@ -935,6 +977,7 @@ def test_get_value_asymmetric_requires_private_key():
 
 
 # --- set_value ---------------------------------------------------------------
+
 
 def test_set_value_only_target_ciphertext_changes():
     key_bytes = crypto.load_key_bytes(crypto.generate_master_key())
@@ -969,7 +1012,9 @@ def test_set_value_get_roundtrip():
 
 def test_set_value_plain_policy_key_stays_cleartext():
     key_bytes = crypto.load_key_bytes(crypto.generate_master_key())
-    enc = core.encrypt_text("PUBLIC=old\nSECRET=shh\n", key_bytes, plain_keys=["PUBLIC"])
+    enc = core.encrypt_text(
+        "PUBLIC=old\nSECRET=shh\n", key_bytes, plain_keys=["PUBLIC"]
+    )
 
     enc2 = core.set_value(enc, "PUBLIC", "new", key_bytes=key_bytes)
     entries = {e.key: e.value for e in parser.parse(enc2).entries()}
@@ -1007,6 +1052,7 @@ def test_set_value_value_with_special_chars():
 
 def test_set_value_asymmetric_requires_private_key():
     from dotseal.exceptions import PrivateKeyNotFoundError
+
     _, pub = crypto.generate_recipient_keypair()
     enc = core.encrypt_text_asymmetric("TOKEN=old\n", [pub])
     with pytest.raises(PrivateKeyNotFoundError):
@@ -1015,6 +1061,7 @@ def test_set_value_asymmetric_requires_private_key():
 
 def test_set_value_symmetric_requires_key_bytes():
     from dotseal.exceptions import MasterKeyNotFoundError
+
     key_bytes = crypto.load_key_bytes(crypto.generate_master_key())
     enc = core.encrypt_text("FOO=bar\n", key_bytes)
     with pytest.raises(MasterKeyNotFoundError):
@@ -1029,6 +1076,7 @@ def test_set_value_invalid_key_name_raises():
 
 
 # --- rotate_text -------------------------------------------------------------
+
 
 def test_rotate_text_round_trips_values():
     old_key = crypto.load_key_bytes(crypto.generate_master_key())

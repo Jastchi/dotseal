@@ -29,6 +29,7 @@ _GITIGNORE_NOTE = "# Added by `dotseal init` -- never commit your master key"
 
 # --- small IO helpers -------------------------------------------------------
 
+
 def _read(path: str) -> str:
     if not os.path.isfile(path):
         raise DotsealError(f"Input file not found: {path}")
@@ -82,10 +83,7 @@ def _warn_policy_override(
         plain_key_regex=plain_key_regex,
     )
     if keys:
-        _warn(
-            "policy override will seal previously plaintext keys: "
-            + ", ".join(keys)
-        )
+        _warn("policy override will seal previously plaintext keys: " + ", ".join(keys))
 
 
 def _resolve_key_bytes(args: argparse.Namespace, *, search_dir: str) -> bytes:
@@ -139,6 +137,7 @@ def _secure_delete(path: str) -> None:
 
 # --- gitignore handling -----------------------------------------------------
 
+
 def _gitignore_covers(content: str, name: str) -> bool:
     """True if the .gitignore ``content`` leaves ``name`` ignored.
 
@@ -178,6 +177,7 @@ def _ensure_gitignored(name: str, directory: str) -> str:
 
 
 # --- commands ---------------------------------------------------------------
+
 
 def cmd_init(args: argparse.Namespace) -> int:
     directory = os.getcwd()
@@ -347,7 +347,9 @@ def cmd_edit(args: argparse.Namespace) -> int:
                 _err(f"Editor not found: {editor!r}. Set $EDITOR to a valid editor.")
                 return 1
             if result.returncode != 0:
-                _err(f"Editor exited with status {result.returncode}; aborting (no changes saved).")
+                _err(
+                    f"Editor exited with status {result.returncode}; aborting (no changes saved)."
+                )
                 return 1
 
             with open(tmp_path, "r", encoding="utf-8") as fh:
@@ -452,7 +454,9 @@ def cmd_rotate(args: argparse.Namespace) -> int:
                 "Verify the new recipient list is correct."
             )
     else:
-        new_key_provided = getattr(args, "new_key", None) or getattr(args, "new_key_file", None)
+        new_key_provided = getattr(args, "new_key", None) or getattr(
+            args, "new_key_file", None
+        )
         if not new_key_provided:
             _err(
                 "Symmetric rotation requires --new-key or --new-key-file. "
@@ -505,9 +509,7 @@ def cmd_add_recipient(args: argparse.Namespace) -> int:
 def cmd_rm_recipient(args: argparse.Namespace) -> int:
     text = _read(args.file)
     if core.file_mode(text) != "asymmetric":
-        _err(
-            f"{args.file} is not an asymmetric (multi-recipient) file."
-        )
+        _err(f"{args.file} is not an asymmetric (multi-recipient) file.")
         return 1
     out = core.remove_recipient_from_text(text, args.identifier)
     core.write_secret_file(args.file, out, mode=0o644)
@@ -544,7 +546,9 @@ def cmd_set(args: argparse.Namespace) -> int:
         return 1
     key, _, value = args.assignment.partition("=")
     if not core.VALID_KEY_RE.match(key):
-        _err(f"set: {key!r} is not a valid variable name (must match [A-Za-z_][A-Za-z0-9_]*)")
+        _err(
+            f"set: {key!r} is not a valid variable name (must match [A-Za-z_][A-Za-z0-9_]*)"
+        )
         return 1
     text = _read(args.file)
     search_dir = os.path.dirname(os.path.abspath(args.file))
@@ -560,6 +564,7 @@ def cmd_set(args: argparse.Namespace) -> int:
 
 # --- argument parsing -------------------------------------------------------
 
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="dotseal",
@@ -568,8 +573,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--version", action="version", version=f"dotseal {__version__}")
 
     def add_key_args(p: argparse.ArgumentParser) -> None:
-        p.add_argument("-k", "--key", help="Master key (base64). Overrides env var and key file.")
-        p.add_argument("--key-file", help=f"Path to a key file (default: discover {core.KEY_FILE_NAME}).")
+        p.add_argument(
+            "-k", "--key", help="Master key (base64). Overrides env var and key file."
+        )
+        p.add_argument(
+            "--key-file",
+            help=f"Path to a key file (default: discover {core.KEY_FILE_NAME}).",
+        )
 
     def add_private_key_args(p: argparse.ArgumentParser) -> None:
         p.add_argument(
@@ -610,17 +620,24 @@ def build_parser() -> argparse.ArgumentParser:
 
     sub = parser.add_subparsers(dest="command", required=True)
 
-    p_init = sub.add_parser("init", help="Generate a master key and gitignore it (symmetric).")
-    p_init.add_argument("--force", action="store_true", help="Overwrite an existing key file.")
+    p_init = sub.add_parser(
+        "init", help="Generate a master key and gitignore it (symmetric)."
+    )
+    p_init.add_argument(
+        "--force", action="store_true", help="Overwrite an existing key file."
+    )
     p_init.set_defaults(func=cmd_init)
 
     p_keygen = sub.add_parser(
         "keygen", help="Generate an X25519 recipient key pair (asymmetric)."
     )
     p_keygen.add_argument(
-        "--out", help=f"Path to write the private key (default: {core.PRIVATE_KEY_FILE_NAME})."
+        "--out",
+        help=f"Path to write the private key (default: {core.PRIVATE_KEY_FILE_NAME}).",
     )
-    p_keygen.add_argument("--force", action="store_true", help="Overwrite an existing private key file.")
+    p_keygen.add_argument(
+        "--force", action="store_true", help="Overwrite an existing private key file."
+    )
     p_keygen.add_argument(
         "--print",
         action="store_true",
@@ -636,14 +653,18 @@ def build_parser() -> argparse.ArgumentParser:
     add_selective_encryption_args(p_enc)
     p_enc.set_defaults(func=cmd_encrypt)
 
-    p_dec = sub.add_parser("decrypt", help="Decrypt .env.enc into a cleartext .env (auto-detects mode).")
+    p_dec = sub.add_parser(
+        "decrypt", help="Decrypt .env.enc into a cleartext .env (auto-detects mode)."
+    )
     p_dec.add_argument("input", nargs="?", default=".env.enc")
     p_dec.add_argument("output", nargs="?", default=".env")
     add_key_args(p_dec)
     add_private_key_args(p_dec)
     p_dec.set_defaults(func=cmd_decrypt)
 
-    p_get = sub.add_parser("get", help="Read one variable's value from an encrypted file.")
+    p_get = sub.add_parser(
+        "get", help="Read one variable's value from an encrypted file."
+    )
     p_get.add_argument("variable", metavar="KEY", help="Variable name to retrieve.")
     p_get.add_argument("file", nargs="?", default=".env.enc", metavar="FILE")
     p_get.add_argument(
@@ -656,7 +677,9 @@ def build_parser() -> argparse.ArgumentParser:
     add_private_key_args(p_get)
     p_get.set_defaults(func=cmd_get)
 
-    p_set = sub.add_parser("set", help="Add or replace one variable in an encrypted file.")
+    p_set = sub.add_parser(
+        "set", help="Add or replace one variable in an encrypted file."
+    )
     p_set.add_argument(
         "assignment",
         metavar="KEY=VALUE",
@@ -667,7 +690,9 @@ def build_parser() -> argparse.ArgumentParser:
     add_private_key_args(p_set)
     p_set.set_defaults(func=cmd_set)
 
-    p_edit = sub.add_parser("edit", help="Decrypt, open $EDITOR, then re-encrypt (sops-style).")
+    p_edit = sub.add_parser(
+        "edit", help="Decrypt, open $EDITOR, then re-encrypt (sops-style)."
+    )
     p_edit.add_argument("input", nargs="?", default=".env.enc")
     add_key_args(p_edit)
     add_private_key_args(p_edit)
@@ -684,7 +709,10 @@ def build_parser() -> argparse.ArgumentParser:
         "--output",
         help="Write rotated output here instead of overwriting the input file.",
     )
-    p_rot.add_argument("--old-key", help="Old master key (base64). Falls back to ambient key if omitted.")
+    p_rot.add_argument(
+        "--old-key",
+        help="Old master key (base64). Falls back to ambient key if omitted.",
+    )
     p_rot.add_argument("--old-key-file", help="Old master key file.")
     p_rot.add_argument("--new-key", help="New master key (base64).")
     p_rot.add_argument("--new-key-file", help="New master key file.")
@@ -695,7 +723,9 @@ def build_parser() -> argparse.ArgumentParser:
     p_add = sub.add_parser(
         "add-recipient", help="Grant a new recipient access to an asymmetric file."
     )
-    p_add.add_argument("public_key", metavar="PUBKEY", help="Recipient public key (dsk-pub-...).")
+    p_add.add_argument(
+        "public_key", metavar="PUBKEY", help="Recipient public key (dsk-pub-...)."
+    )
     p_add.add_argument("file", nargs="?", default=".env.enc")
     add_private_key_args(p_add)
     p_add.set_defaults(func=cmd_add_recipient)
@@ -704,7 +734,9 @@ def build_parser() -> argparse.ArgumentParser:
         "rm-recipient", help="Revoke a recipient slot from an asymmetric file."
     )
     p_rm.add_argument(
-        "identifier", metavar="PUBKEY_OR_FP", help="Recipient public key or fingerprint."
+        "identifier",
+        metavar="PUBKEY_OR_FP",
+        help="Recipient public key or fingerprint.",
     )
     p_rm.add_argument("file", nargs="?", default=".env.enc")
     p_rm.set_defaults(func=cmd_rm_recipient)

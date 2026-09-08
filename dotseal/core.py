@@ -56,6 +56,7 @@ VALID_KEY_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*\Z")
 
 # --- Key resolution ---------------------------------------------------------
 
+
 def _find_file_upward(filename: str, start_dir: str | None = None) -> str | None:
     """Walk up the directory tree from ``start_dir`` and return the first path
     where ``filename`` exists as a regular file, or ``None`` if not found."""
@@ -176,6 +177,7 @@ def resolve_private_key(
 
 # --- Metadata ---------------------------------------------------------------
 
+
 def _encode_regex_token(regexes: list[str]) -> str:
     encoded = [
         base64.urlsafe_b64encode(pattern.encode("utf-8")).decode("ascii")
@@ -208,10 +210,10 @@ def _decode_regex_token(token: str) -> list[str]:
 # inline flags (?i), (?im), (?i:…), negated flags (?-i), Python named groups
 # (?P<name>) / backreferences (?P=name), and inline comments (?#…).
 _PYTHON_ONLY_REGEX_SYNTAX = re.compile(
-    r"\(\?[aiLmsux]"   # inline flag(s): (?i, (?im, (?i:…
-    r"|\(\?-[aiLmsux]" # negated flag: (?-i
-    r"|\(\?P[<=]"      # Python named group (?P<name>) or backreference (?P=name)
-    r"|\(\?#"          # inline comment (?#…)
+    r"\(\?[aiLmsux]"  # inline flag(s): (?i, (?im, (?i:…
+    r"|\(\?-[aiLmsux]"  # negated flag: (?-i
+    r"|\(\?P[<=]"  # Python named group (?P<name>) or backreference (?P=name)
+    r"|\(\?#"  # inline comment (?#…)
 )
 
 
@@ -245,9 +247,7 @@ def parse_plaintext_policy(meta: dict[str, str]) -> tuple[set[str], list[str]]:
 def _metadata_policy_tokens(plain_keys: set[str], plain_key_regex: list[str]) -> str:
     tokens: list[str] = []
     if plain_keys:
-        tokens.append(
-            f"{PLAINTEXT_KEYS_TOKEN}=" + ",".join(sorted(plain_keys))
-        )
+        tokens.append(f"{PLAINTEXT_KEYS_TOKEN}=" + ",".join(sorted(plain_keys)))
     if plain_key_regex:
         tokens.append(
             f"{PLAINTEXT_REGEX_TOKEN}=" + _encode_regex_token(plain_key_regex)
@@ -358,7 +358,7 @@ def _is_footer_line(text: str) -> bool:
     """
     if not text.startswith(_FOOTER_PREFIX):
         return False
-    return "v" in _parse_tokens(text[len(METADATA_PREFIX):].strip())
+    return "v" in _parse_tokens(text[len(METADATA_PREFIX) :].strip())
 
 
 def parse_metadata(parsed: parser.ParsedEnv) -> dict[str, str]:
@@ -370,7 +370,7 @@ def parse_metadata(parsed: parser.ParsedEnv) -> dict[str, str]:
         if text.startswith(RECIPIENT_PREFIX):
             continue  # recipient lines are parsed separately
         if _is_footer_line(text):
-            return _parse_tokens(text[len(METADATA_PREFIX):].strip())
+            return _parse_tokens(text[len(METADATA_PREFIX) :].strip())
     return {}
 
 
@@ -383,7 +383,7 @@ def parse_recipients(parsed: parser.ParsedEnv) -> list[dict[str, str]]:
         text = record.raw.strip()
         if not text.startswith(RECIPIENT_PREFIX):
             continue
-        fields = _parse_tokens(text[len(RECIPIENT_PREFIX):].strip())
+        fields = _parse_tokens(text[len(RECIPIENT_PREFIX) :].strip())
         if {"fp", "ephem", "enc"} <= fields.keys():
             recipients.append(
                 {"fp": fields["fp"], "ephem": fields["ephem"], "enc": fields["enc"]}
@@ -423,11 +423,13 @@ def _strip_managed_comments(parsed: parser.ParsedEnv) -> None:
 
 # --- Whole-file transforms --------------------------------------------------
 
+
 def already_encrypted_keys(text: str, plain_keys: list[str]) -> list[str]:
     """Return those keys from ``plain_keys`` whose values are already ENC[...] in ``text``."""
     parsed = parser.parse(text)
     return sorted(
-        k for k in plain_keys
+        k
+        for k in plain_keys
         if any(
             r.kind == "entry" and r.key == k and crypto.is_encrypted_value(r.value)
             for r in parsed.records
@@ -437,8 +439,7 @@ def already_encrypted_keys(text: str, plain_keys: list[str]) -> list[str]:
 
 def _has_encrypted_values(parsed: parser.ParsedEnv) -> bool:
     return any(
-        r.kind == "entry" and crypto.is_encrypted_value(r.value)
-        for r in parsed.records
+        r.kind == "entry" and crypto.is_encrypted_value(r.value) for r in parsed.records
     )
 
 
@@ -668,6 +669,7 @@ def decrypt_to_dict(text: str, key_bytes: bytes) -> dict[str, str]:
 
 # --- Asymmetric (multi-recipient) transforms --------------------------------
 
+
 def _assemble_asym(
     parsed: parser.ParsedEnv,
     recipients: list[dict[str, str]],
@@ -786,9 +788,7 @@ def recover_data_key(parsed: parser.ParsedEnv, private_key: str) -> bytes:
             return crypto.unwrap_dek(priv, r["ephem"], r["enc"])
         except DecryptionError:
             continue
-    raise RecipientNotFoundError(
-        "This private key is not a recipient of this file."
-    )
+    raise RecipientNotFoundError("This private key is not a recipient of this file.")
 
 
 def decrypt_text_asymmetric(text: str, private_key: str) -> str:
@@ -931,6 +931,7 @@ def remove_recipient_from_text(text: str, identifier: str) -> str:
 
 # --- Single-key operations --------------------------------------------------
 
+
 def get_value(
     text: str,
     key: str,
@@ -970,7 +971,11 @@ def get_value(
 
     if last is None:
         raise KeyNotFoundError(f"Key not found: {key!r}")
-    return _decrypt(last.value, last.key) if crypto.is_encrypted_value(last.value) else last.value
+    return (
+        _decrypt(last.value, last.key)
+        if crypto.is_encrypted_value(last.value)
+        else last.value
+    )
 
 
 def set_value(
@@ -1030,6 +1035,7 @@ def set_value(
 
 
 # --- Key rotation -----------------------------------------------------------
+
 
 def rotate_text(
     text: str,
@@ -1101,6 +1107,7 @@ def rotate_text_asymmetric(
 
 
 # --- Filesystem helpers -----------------------------------------------------
+
 
 def write_secret_file(path: str, text: str, *, mode: int = 0o600) -> None:
     """Write ``text`` to ``path`` with restrictive (owner-only) permissions.
