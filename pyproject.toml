@@ -8,7 +8,7 @@ name = "dotseal"
 version = "0.0.0"
 description = "Git-friendly encrypted .env files with cleartext keys and sealed values (SOPS-inspired structural encryption)."
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 license = { text = "MIT" }
 authors = [{ name = "dotseal contributors" }]
 keywords = ["dotenv", "dotseal", "env", "encryption", "secrets", "sops", "aes-gcm", "configuration"]
@@ -19,7 +19,6 @@ classifiers = [
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3 :: Only",
-    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
@@ -30,8 +29,7 @@ classifiers = [
 ]
 dependencies = [
     # A range, not an exact pin: dotseal is a library, and an == pin forces
-    # version conflicts onto every consumer (and breaks universal resolution
-    # for requires-python >= 3.9).
+    # version conflicts onto every consumer.
     "cryptography>=42",
 ]
 
