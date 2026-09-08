@@ -9,7 +9,6 @@ without ever materializing a cleartext file.
 from __future__ import annotations
 
 import os
-from typing import Optional
 
 from . import core, crypto
 from .exceptions import MasterKeyNotFoundError, DotsealError
@@ -18,8 +17,8 @@ from .exceptions import MasterKeyNotFoundError, DotsealError
 def load_env(
     dotenv_path: str = ".env.enc",
     *,
-    master_key: Optional[str] = None,
-    private_key: Optional[str] = None,
+    master_key: str | None = None,
+    private_key: str | None = None,
     override: bool = False,
     encoding: str = "utf-8",
 ) -> bool:

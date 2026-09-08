@@ -16,7 +16,6 @@ import contextlib
 import os
 import re
 import tempfile
-from typing import Dict, List, Optional, Pattern, Set, Tuple
 
 from . import crypto, parser
 from .exceptions import (
@@ -57,7 +56,7 @@ VALID_KEY_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*\Z")
 
 # --- Key resolution ---------------------------------------------------------
 
-def _find_file_upward(filename: str, start_dir: Optional[str] = None) -> Optional[str]:
+def _find_file_upward(filename: str, start_dir: str | None = None) -> str | None:
     """Walk up the directory tree from ``start_dir`` and return the first path
     where ``filename`` exists as a regular file, or ``None`` if not found."""
     current = os.path.abspath(start_dir or os.getcwd())
@@ -71,7 +70,7 @@ def _find_file_upward(filename: str, start_dir: Optional[str] = None) -> Optiona
         current = parent
 
 
-def find_key_file(start_dir: Optional[str] = None) -> Optional[str]:
+def find_key_file(start_dir: str | None = None) -> str | None:
     """Return the path to a local key file, searching upward from ``start_dir``.
 
     Walks up the directory tree (like git looking for ``.git``) so the tool
@@ -81,10 +80,10 @@ def find_key_file(start_dir: Optional[str] = None) -> Optional[str]:
 
 
 def resolve_master_key(
-    master_key: Optional[str] = None,
+    master_key: str | None = None,
     *,
-    key_file: Optional[str] = None,
-    search_dir: Optional[str] = None,
+    key_file: str | None = None,
+    search_dir: str | None = None,
 ) -> str:
     """Resolve the master key as a base64 string.
 
@@ -127,16 +126,16 @@ def resolve_master_key(
     )
 
 
-def find_private_key_file(start_dir: Optional[str] = None) -> Optional[str]:
+def find_private_key_file(start_dir: str | None = None) -> str | None:
     """Return the path to a local recipient private key file, searching upward."""
     return _find_file_upward(PRIVATE_KEY_FILE_NAME, start_dir)
 
 
 def resolve_private_key(
-    private_key: Optional[str] = None,
+    private_key: str | None = None,
     *,
-    key_file: Optional[str] = None,
-    search_dir: Optional[str] = None,
+    key_file: str | None = None,
+    search_dir: str | None = None,
 ) -> str:
     """Resolve a recipient private key (``dsk-prv-...``) string.
 
@@ -177,7 +176,7 @@ def resolve_private_key(
 
 # --- Metadata ---------------------------------------------------------------
 
-def _encode_regex_token(regexes: List[str]) -> str:
+def _encode_regex_token(regexes: list[str]) -> str:
     encoded = [
         base64.urlsafe_b64encode(pattern.encode("utf-8")).decode("ascii")
         for pattern in regexes
@@ -185,8 +184,8 @@ def _encode_regex_token(regexes: List[str]) -> str:
     return ",".join(encoded)
 
 
-def _decode_regex_token(token: str) -> List[str]:
-    patterns: List[str] = []
+def _decode_regex_token(token: str) -> list[str]:
+    patterns: list[str] = []
     for chunk in token.split(","):
         text = chunk.strip()
         if not text:
@@ -216,8 +215,8 @@ _PYTHON_ONLY_REGEX_SYNTAX = re.compile(
 )
 
 
-def _compile_regexes(regexes: List[str]) -> List[Pattern[str]]:
-    compiled: List[Pattern[str]] = []
+def _compile_regexes(regexes: list[str]) -> list[re.Pattern[str]]:
+    compiled: list[re.Pattern[str]] = []
     for pattern in regexes:
         if _PYTHON_ONLY_REGEX_SYNTAX.search(pattern):
             raise EncryptionError(
@@ -235,7 +234,7 @@ def _compile_regexes(regexes: List[str]) -> List[Pattern[str]]:
     return compiled
 
 
-def parse_plaintext_policy(meta: Dict[str, str]) -> Tuple[Set[str], List[str]]:
+def parse_plaintext_policy(meta: dict[str, str]) -> tuple[set[str], list[str]]:
     keys_raw = meta.get(PLAINTEXT_KEYS_TOKEN, "").strip()
     regex_raw = meta.get(PLAINTEXT_REGEX_TOKEN, "").strip()
     keys = {name for name in keys_raw.split(",") if name}
@@ -243,8 +242,8 @@ def parse_plaintext_policy(meta: Dict[str, str]) -> Tuple[Set[str], List[str]]:
     return keys, regexes
 
 
-def _metadata_policy_tokens(plain_keys: Set[str], plain_key_regex: List[str]) -> str:
-    tokens: List[str] = []
+def _metadata_policy_tokens(plain_keys: set[str], plain_key_regex: list[str]) -> str:
+    tokens: list[str] = []
     if plain_keys:
         tokens.append(
             f"{PLAINTEXT_KEYS_TOKEN}=" + ",".join(sorted(plain_keys))
@@ -258,9 +257,9 @@ def _metadata_policy_tokens(plain_keys: Set[str], plain_key_regex: List[str]) ->
 
 def _resolved_plaintext_policy(
     parsed: parser.ParsedEnv,
-    plain_keys: Optional[List[str]],
-    plain_key_regex: Optional[List[str]],
-) -> Tuple[Set[str], List[str], List[Pattern[str]]]:
+    plain_keys: list[str] | None,
+    plain_key_regex: list[str] | None,
+) -> tuple[set[str], list[str], list[re.Pattern[str]]]:
     existing_keys, existing_regex = parse_plaintext_policy(parse_metadata(parsed))
     if plain_keys is None and plain_key_regex is None:
         resolved_keys, resolved_regex = existing_keys, existing_regex
@@ -281,9 +280,9 @@ def keys_newly_sealed_by_policy_override(
     original: parser.ParsedEnv,
     cleartext: parser.ParsedEnv,
     *,
-    plain_keys: Optional[List[str]] = None,
-    plain_key_regex: Optional[List[str]] = None,
-) -> List[str]:
+    plain_keys: list[str] | None = None,
+    plain_key_regex: list[str] | None = None,
+) -> list[str]:
     """Entry keys that were plaintext under the file policy but will be sealed under the override."""
     if plain_keys is None and plain_key_regex is None:
         return []
@@ -292,7 +291,7 @@ def keys_newly_sealed_by_policy_override(
     new_keys, _, new_compiled = _resolved_plaintext_policy(
         original, plain_keys, plain_key_regex
     )
-    newly_sealed: List[str] = []
+    newly_sealed: list[str] = []
     for record in cleartext.records:
         if record.kind != "entry":
             continue
@@ -305,7 +304,7 @@ def keys_newly_sealed_by_policy_override(
 
 
 def _should_encrypt_value(
-    key: str, plain_keys: Set[str], plain_regex_compiled: List[Pattern[str]]
+    key: str, plain_keys: set[str], plain_regex_compiled: list[re.Pattern[str]]
 ) -> bool:
     if key in plain_keys:
         return False
@@ -315,8 +314,8 @@ def _should_encrypt_value(
 def build_metadata_line(
     key_bytes: bytes,
     *,
-    plain_keys: Optional[Set[str]] = None,
-    plain_key_regex: Optional[List[str]] = None,
+    plain_keys: set[str] | None = None,
+    plain_key_regex: list[str] | None = None,
 ) -> str:
     fp = crypto.key_fingerprint(key_bytes)
     return (
@@ -327,8 +326,8 @@ def build_metadata_line(
 
 def build_metadata_line_asym(
     *,
-    plain_keys: Optional[Set[str]] = None,
-    plain_key_regex: Optional[List[str]] = None,
+    plain_keys: set[str] | None = None,
+    plain_key_regex: list[str] | None = None,
 ) -> str:
     return (
         f"{METADATA_PREFIX} v={METADATA_VERSION_ASYM} alg={crypto.ALGORITHM_ASYM}"
@@ -340,9 +339,9 @@ def build_recipient_line(fingerprint: str, ephem: str, enc: str) -> str:
     return f"{RECIPIENT_PREFIX}fp={fingerprint} ephem={ephem} enc={enc}"
 
 
-def _parse_tokens(body: str) -> Dict[str, str]:
+def _parse_tokens(body: str) -> dict[str, str]:
     """Parse ``k=v`` whitespace-separated tokens; tokens without ``=`` are skipped."""
-    fields: Dict[str, str] = {}
+    fields: dict[str, str] = {}
     for token in body.split():
         if "=" in token:
             k, v = token.split("=", 1)
@@ -362,7 +361,7 @@ def _is_footer_line(text: str) -> bool:
     return "v" in _parse_tokens(text[len(METADATA_PREFIX):].strip())
 
 
-def parse_metadata(parsed: parser.ParsedEnv) -> Dict[str, str]:
+def parse_metadata(parsed: parser.ParsedEnv) -> dict[str, str]:
     """Extract the ``# dotseal:`` footer tokens (version/algorithm), if present."""
     for record in parsed.records:
         if record.kind != "comment":
@@ -375,9 +374,9 @@ def parse_metadata(parsed: parser.ParsedEnv) -> Dict[str, str]:
     return {}
 
 
-def parse_recipients(parsed: parser.ParsedEnv) -> List[Dict[str, str]]:
+def parse_recipients(parsed: parser.ParsedEnv) -> list[dict[str, str]]:
     """Extract all ``# dotseal:recipient`` slots, in file order."""
-    recipients: List[Dict[str, str]] = []
+    recipients: list[dict[str, str]] = []
     for record in parsed.records:
         if record.kind != "comment":
             continue
@@ -424,7 +423,7 @@ def _strip_managed_comments(parsed: parser.ParsedEnv) -> None:
 
 # --- Whole-file transforms --------------------------------------------------
 
-def already_encrypted_keys(text: str, plain_keys: List[str]) -> List[str]:
+def already_encrypted_keys(text: str, plain_keys: list[str]) -> list[str]:
     """Return those keys from ``plain_keys`` whose values are already ENC[...] in ``text``."""
     parsed = parser.parse(text)
     return sorted(
@@ -443,7 +442,7 @@ def _has_encrypted_values(parsed: parser.ParsedEnv) -> bool:
     )
 
 
-def _is_asym_metadata(meta: Dict[str, str]) -> bool:
+def _is_asym_metadata(meta: dict[str, str]) -> bool:
     return (
         meta.get("alg") == crypto.ALGORITHM_ASYM
         or meta.get("v") == METADATA_VERSION_ASYM
@@ -454,8 +453,8 @@ def encrypt_text(
     text: str,
     key_bytes: bytes,
     *,
-    plain_keys: Optional[List[str]] = None,
-    plain_key_regex: Optional[List[str]] = None,
+    plain_keys: list[str] | None = None,
+    plain_key_regex: list[str] | None = None,
 ) -> str:
     """Encrypt all cleartext values in ``text``; return ``.env.enc`` text.
 
@@ -512,7 +511,7 @@ def encrypt_text(
     # inherit that policy and silently unseal it without an explicit --plain-key
     # from the user.  Keys in the policy that simply don't exist in this file
     # (forward-looking entries) are kept as-is.
-    encrypted_in_output: Set[str] = {
+    encrypted_in_output: set[str] = {
         r.key
         for r in parsed.records
         if r.kind == "entry" and crypto.is_encrypted_value(r.value)
@@ -535,13 +534,13 @@ def encrypt_text(
 
 def _original_tokens(
     parsed: parser.ParsedEnv, decrypt_one
-) -> Dict[str, Tuple[str, str]]:
+) -> dict[str, tuple[str, str]]:
     """Map each encrypted entry to ``name -> (token, plaintext)`` for reuse.
 
     Entries that fail to decrypt are simply skipped (they will be re-encrypted
     fresh). With duplicate names the last occurrence wins.
     """
-    tokens: Dict[str, Tuple[str, str]] = {}
+    tokens: dict[str, tuple[str, str]] = {}
     for record in parsed.records:
         if record.kind != "entry" or not crypto.is_encrypted_value(record.value):
             continue
@@ -556,8 +555,8 @@ def reencrypt_text(
     key_bytes: bytes,
     original_text: str,
     *,
-    plain_keys: Optional[List[str]] = None,
-    plain_key_regex: Optional[List[str]] = None,
+    plain_keys: list[str] | None = None,
+    plain_key_regex: list[str] | None = None,
 ) -> str:
     """Re-encrypt edited cleartext, reusing unchanged ciphertexts.
 
@@ -649,12 +648,12 @@ def decrypt_text(text: str, key_bytes: bytes) -> str:
     return parser.serialize(parsed)
 
 
-def decrypt_to_dict(text: str, key_bytes: bytes) -> Dict[str, str]:
+def decrypt_to_dict(text: str, key_bytes: bytes) -> dict[str, str]:
     """Decrypt ``text`` into a ``{name: value}`` mapping, in memory only."""
     parsed = parser.parse(text)
     _reject_asymmetric_for_master_key(parsed)
     verify_key(parsed, key_bytes)
-    result: Dict[str, str] = {}
+    result: dict[str, str] = {}
     for record in parsed.records:
         if record.kind != "entry":
             continue
@@ -671,10 +670,10 @@ def decrypt_to_dict(text: str, key_bytes: bytes) -> Dict[str, str]:
 
 def _assemble_asym(
     parsed: parser.ParsedEnv,
-    recipients: List[Dict[str, str]],
+    recipients: list[dict[str, str]],
     *,
-    plain_keys: Optional[Set[str]] = None,
-    plain_key_regex: Optional[List[str]] = None,
+    plain_keys: set[str] | None = None,
+    plain_key_regex: list[str] | None = None,
 ) -> str:
     """Render a parsed body + recipient slots into final ``.env.enc`` text.
 
@@ -699,10 +698,10 @@ def _assemble_asym(
 
 def encrypt_text_asymmetric(
     text: str,
-    recipient_public_keys: List[str],
+    recipient_public_keys: list[str],
     *,
-    plain_keys: Optional[List[str]] = None,
-    plain_key_regex: Optional[List[str]] = None,
+    plain_keys: list[str] | None = None,
+    plain_key_regex: list[str] | None = None,
 ) -> str:
     """Encrypt a cleartext file for one or more recipients (envelope scheme).
 
@@ -725,7 +724,7 @@ def encrypt_text_asymmetric(
 
     # De-duplicate by fingerprint while preserving order.
     seen = set()
-    pubs: List[str] = []
+    pubs: list[str] = []
     for pub in recipient_public_keys:
         fp = crypto.recipient_fingerprint(pub)
         if fp not in seen:
@@ -747,7 +746,7 @@ def encrypt_text_asymmetric(
         else:
             record.value = parser.format_value(record.value)
 
-    encrypted_in_output: Set[str] = {
+    encrypted_in_output: set[str] = {
         r.key
         for r in parsed.records
         if r.kind == "entry" and crypto.is_encrypted_value(r.value)
@@ -808,11 +807,11 @@ def decrypt_text_asymmetric(text: str, private_key: str) -> str:
     return parser.serialize(parsed)
 
 
-def decrypt_to_dict_asymmetric(text: str, private_key: str) -> Dict[str, str]:
+def decrypt_to_dict_asymmetric(text: str, private_key: str) -> dict[str, str]:
     """Decrypt an asymmetric file into a ``{name: value}`` mapping, in memory."""
     parsed = parser.parse(text)
     dek = recover_data_key(parsed, private_key)
-    result: Dict[str, str] = {}
+    result: dict[str, str] = {}
     for record in parsed.records:
         if record.kind != "entry":
             continue
@@ -828,8 +827,8 @@ def reencrypt_text_asymmetric(
     private_key: str,
     original_text: str,
     *,
-    plain_keys: Optional[List[str]] = None,
-    plain_key_regex: Optional[List[str]] = None,
+    plain_keys: list[str] | None = None,
+    plain_key_regex: list[str] | None = None,
 ) -> str:
     """Re-encrypt edited cleartext, reusing the original file's DEK and recipients.
 
@@ -936,8 +935,8 @@ def get_value(
     text: str,
     key: str,
     *,
-    key_bytes: Optional[bytes] = None,
-    private_key: Optional[str] = None,
+    key_bytes: bytes | None = None,
+    private_key: str | None = None,
 ) -> str:
     """Return the value of one variable; raise :exc:`KeyNotFoundError` if absent.
 
@@ -964,7 +963,7 @@ def get_value(
         def _decrypt(token: str, name: str) -> str:
             return crypto.decrypt_value(key_bytes, token, aad=name)
 
-    last: Optional[parser.Record] = None
+    last: parser.Record | None = None
     for record in parsed.records:
         if record.kind == "entry" and record.key == key:
             last = record
@@ -979,8 +978,8 @@ def set_value(
     key: str,
     value: str,
     *,
-    key_bytes: Optional[bytes] = None,
-    private_key: Optional[str] = None,
+    key_bytes: bytes | None = None,
+    private_key: str | None = None,
 ) -> str:
     """Return updated .env.enc text with one key added or replaced.
 
@@ -1068,7 +1067,7 @@ def rotate_text(
 def rotate_text_asymmetric(
     text: str,
     private_key: str,
-    recipient_public_keys: List[str],
+    recipient_public_keys: list[str],
 ) -> str:
     """Re-encrypt an asymmetric file with a fresh DEK for a new recipient set.
 

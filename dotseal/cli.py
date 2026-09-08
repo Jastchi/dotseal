@@ -20,7 +20,6 @@ import shlex
 import subprocess
 import sys
 import tempfile
-from typing import List, Optional
 
 from . import __version__, core, crypto, parser
 from .exceptions import DotsealError, KeyNotFoundError
@@ -47,7 +46,7 @@ def _warn(msg: str) -> None:
 
 def _warn_plain_keys_already_encrypted(
     text: str,
-    plain_keys: Optional[List[str]],
+    plain_keys: list[str] | None,
 ) -> None:
     """Warn when --plain-key names a value that is already ENC[...].
 
@@ -71,8 +70,8 @@ def _warn_policy_override(
     original_text: str,
     cleartext: str,
     *,
-    plain_keys: Optional[List[str]],
-    plain_key_regex: Optional[List[str]],
+    plain_keys: list[str] | None,
+    plain_key_regex: list[str] | None,
 ) -> None:
     if plain_keys is None and plain_key_regex is None:
         return
@@ -106,9 +105,9 @@ def _resolve_private_key(args: argparse.Namespace, *, search_dir: str) -> str:
     )
 
 
-def _collect_recipients(args: argparse.Namespace) -> List[str]:
+def _collect_recipients(args: argparse.Namespace) -> list[str]:
     """Gather recipient public keys from --recipient and --recipients-file."""
-    recipients: List[str] = list(getattr(args, "recipient", None) or [])
+    recipients: list[str] = list(getattr(args, "recipient", None) or [])
     recipients_file = getattr(args, "recipients_file", None)
     if recipients_file:
         if not os.path.isfile(recipients_file):
@@ -311,7 +310,7 @@ def cmd_edit(args: argparse.Namespace) -> int:
     search_dir = os.path.dirname(os.path.abspath(args.input))
     original_text = None
     is_asym = False
-    recipients: List[str] = []
+    recipients: list[str] = []
 
     if os.path.isfile(args.input):
         original_text = _read(args.input)
@@ -713,7 +712,7 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def main(argv: Optional[List[str]] = None) -> int:
+def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     try:

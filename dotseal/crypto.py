@@ -34,7 +34,6 @@ import base64
 import binascii
 import hashlib
 import os
-from typing import Tuple
 
 from cryptography.exceptions import InvalidTag
 from cryptography.hazmat.primitives import hashes
@@ -201,7 +200,7 @@ def decrypt_value(key_bytes: bytes, token: str, *, aad: str) -> str:
 
 # --- Asymmetric recipient keys (X25519) -------------------------------------
 
-def generate_recipient_keypair() -> Tuple[str, str]:
+def generate_recipient_keypair() -> tuple[str, str]:
     """Generate a fresh X25519 recipient key pair.
 
     Returns:
@@ -292,7 +291,7 @@ def _wrap_key(ephem_pub_raw: bytes, recipient_pub_raw: bytes, shared: bytes) -> 
     ).derive(shared)
 
 
-def wrap_dek(recipient_public: X25519PublicKey, dek: bytes) -> Tuple[str, str]:
+def wrap_dek(recipient_public: X25519PublicKey, dek: bytes) -> tuple[str, str]:
     """Wrap ``dek`` for a single recipient via ephemeral-static ECDH.
 
     Returns:
