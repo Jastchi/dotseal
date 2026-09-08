@@ -28,7 +28,6 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import List, Optional, Tuple
 
 from .exceptions import ParseError
 
@@ -57,9 +56,9 @@ class Record:
 
 @dataclass
 class ParsedEnv:
-    records: List[Record]
+    records: list[Record]
 
-    def entries(self) -> List[Record]:
+    def entries(self) -> list[Record]:
         return [r for r in self.records if r.kind == "entry"]
 
 
@@ -86,7 +85,7 @@ _DOUBLE_ESCAPE = {
 _INLINE_COMMENT_RE = re.compile(r"\s+#")
 
 
-def _find_closing_quote(text: str, quote: str) -> Optional[int]:
+def _find_closing_quote(text: str, quote: str) -> int | None:
     """Index of the quote that closes ``text[0]``, or None if unterminated."""
     i = 1
     while i < len(text):
@@ -100,7 +99,7 @@ def _find_closing_quote(text: str, quote: str) -> Optional[int]:
     return None
 
 
-def _split_value(raw: str) -> Tuple[str, str]:
+def _split_value(raw: str) -> tuple[str, str]:
     """Split the raw text after ``=`` into (logical value, inline comment).
 
     The comment (if any) is returned with its leading whitespace and ``#`` so
@@ -170,7 +169,7 @@ def format_value(value: str) -> str:
 
 def parse(text: str) -> ParsedEnv:
     """Parse the full text of a ``.env``/``.env.enc`` file into records."""
-    records: List[Record] = []
+    records: list[Record] = []
     for lineno, line in enumerate(text.splitlines(), start=1):
         stripped = line.strip()
         if stripped == "":
@@ -205,7 +204,7 @@ def serialize(parsed: ParsedEnv) -> str:
     token or an already-formatted cleartext value). Use :func:`format_value`
     before assigning cleartext values you want safely quoted.
     """
-    lines: List[str] = []
+    lines: list[str] = []
     for r in parsed.records:
         if r.kind == "blank":
             lines.append("")
