@@ -108,7 +108,7 @@ def resolve_master_key(
     if key_file:
         if not os.path.isfile(key_file):
             raise MasterKeyNotFoundError(f"Key file not found: {key_file}")
-        with open(key_file, "r", encoding="utf-8") as fh:
+        with open(key_file, encoding="utf-8") as fh:
             return fh.read().strip()
 
     env_value = os.environ.get(ENV_VAR_NAME)
@@ -117,7 +117,7 @@ def resolve_master_key(
 
     path = find_key_file(search_dir)
     if path:
-        with open(path, "r", encoding="utf-8") as fh:
+        with open(path, encoding="utf-8") as fh:
             return fh.read().strip()
 
     raise MasterKeyNotFoundError(
@@ -156,7 +156,7 @@ def resolve_private_key(
     if key_file:
         if not os.path.isfile(key_file):
             raise PrivateKeyNotFoundError(f"Private key file not found: {key_file}")
-        with open(key_file, "r", encoding="utf-8") as fh:
+        with open(key_file, encoding="utf-8") as fh:
             return fh.read().strip()
 
     env_value = os.environ.get(PRIVATE_ENV_VAR_NAME)
@@ -165,7 +165,7 @@ def resolve_private_key(
 
     path = find_private_key_file(search_dir)
     if path:
-        with open(path, "r", encoding="utf-8") as fh:
+        with open(path, encoding="utf-8") as fh:
             return fh.read().strip()
 
     raise PrivateKeyNotFoundError(
@@ -1131,8 +1131,6 @@ def write_secret_file(path: str, text: str, *, mode: int = 0o600) -> None:
             os.fsync(fh.fileno())
         os.replace(tmp_path, abs_path)
     except BaseException:
-        try:
+        with contextlib.suppress(OSError):
             os.unlink(tmp_path)
-        except OSError:
-            pass
         raise

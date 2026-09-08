@@ -66,7 +66,7 @@ def test_non_recipient_cannot_decrypt():
 def test_values_identical_across_recipients_in_file():
     """Each variable is encrypted once with the shared DEK, not per-recipient."""
     _, pub_a = crypto.generate_recipient_keypair()
-    _, pub_b = crypto.generate_recipient_keypair()
+    _, _pub_b = crypto.generate_recipient_keypair()
     enc_one = core.encrypt_text_asymmetric("FOO=bar\n", [pub_a])
     # Same call only differs by recipient count -> body has a single ENC token.
     assert enc_one.count("FOO=ENC[") == 1
@@ -107,7 +107,7 @@ def test_remove_recipient_revokes_access():
 
 
 def test_remove_recipient_by_fingerprint():
-    priv_a, pub_a = crypto.generate_recipient_keypair()
+    _priv_a, pub_a = crypto.generate_recipient_keypair()
     _, pub_b = crypto.generate_recipient_keypair()
     enc = core.encrypt_text_asymmetric("FOO=bar\n", [pub_a, pub_b])
     fp_b = crypto.recipient_fingerprint(pub_b)

@@ -12,6 +12,8 @@ Public API
 
 from __future__ import annotations
 
+from importlib.metadata import version as _pkg_version
+
 from .core import (
     ENV_VAR_NAME,
     KEY_FILE_NAME,
@@ -57,48 +59,46 @@ from .exceptions import (
 )
 from .loader import load_env
 
-from importlib.metadata import version as _pkg_version
-
 __version__ = _pkg_version("dotseal")
 
 __all__ = [
-    "__version__",
-    "load_env",
-    "encrypt_text",
-    "decrypt_text",
-    "decrypt_to_dict",
-    "encrypt_text_asymmetric",
-    "decrypt_text_asymmetric",
-    "decrypt_to_dict_asymmetric",
-    "reencrypt_text",
-    "reencrypt_text_asymmetric",
-    "add_recipient_to_text",
-    "remove_recipient_from_text",
-    "file_mode",
-    "generate_master_key",
-    "generate_recipient_keypair",
-    "resolve_master_key",
-    "resolve_private_key",
-    "load_key_bytes",
-    "key_fingerprint",
-    "recipient_fingerprint",
-    "public_key_str_from_private",
     "ENV_VAR_NAME",
     "KEY_FILE_NAME",
     "PRIVATE_ENV_VAR_NAME",
     "PRIVATE_KEY_FILE_NAME",
-    "get_value",
-    "set_value",
+    "DecryptionError",
     "DotsealError",
-    "KeyManagementError",
-    "KeyNotFoundError",
-    "MasterKeyNotFoundError",
-    "PrivateKeyNotFoundError",
+    "EncryptionError",
     "InvalidMasterKeyError",
     "InvalidRecipientKeyError",
     "KeyFingerprintMismatchError",
-    "RecipientNotFoundError",
-    "DecryptionError",
-    "EncryptionError",
+    "KeyManagementError",
+    "KeyNotFoundError",
+    "MasterKeyNotFoundError",
     "ParseError",
+    "PrivateKeyNotFoundError",
+    "RecipientNotFoundError",
+    "__version__",
+    "add_recipient_to_text",
+    "decrypt_text",
+    "decrypt_text_asymmetric",
+    "decrypt_to_dict",
+    "decrypt_to_dict_asymmetric",
+    "encrypt_text",
+    "encrypt_text_asymmetric",
+    "file_mode",
+    "generate_master_key",
+    "generate_recipient_keypair",
+    "get_value",
+    "key_fingerprint",
+    "load_env",
+    "load_key_bytes",
+    "public_key_str_from_private",
+    "recipient_fingerprint",
+    "reencrypt_text",
+    "reencrypt_text_asymmetric",
+    "remove_recipient_from_text",
+    "resolve_master_key",
+    "resolve_private_key",
+    "set_value",
 ]

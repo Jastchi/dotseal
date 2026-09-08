@@ -53,6 +53,18 @@ dotseal = "dotseal.cli:main"
 [tool.hatch.build.targets.wheel]
 packages = ["dotseal"]
 
+[tool.ruff.lint]
+# Ruff's default set (E4, E7, E9, F) plus:
+#   UP  - keep the PEP 585/604 annotations from drifting back to typing.List
+#   I   - import sorting
+#   B   - flake8-bugbear, real bug patterns rather than style
+#   SIM - obvious simplifications
+#   RUF - ruff's own checks
+# Deliberately not "ALL": it lands ~1800 violations here, most of them
+# docstring/annotation mandates plus COM812 and E501, which fight the
+# formatter.
+select = ["E4", "E7", "E9", "F", "UP", "I", "B", "SIM", "RUF"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra"

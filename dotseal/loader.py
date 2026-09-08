@@ -11,7 +11,7 @@ from __future__ import annotations
 import os
 
 from . import core, crypto
-from .exceptions import MasterKeyNotFoundError, DotsealError
+from .exceptions import DotsealError, MasterKeyNotFoundError
 
 
 def load_env(
@@ -57,7 +57,7 @@ def load_env(
         raise FileNotFoundError(f"Encrypted env file not found: {dotenv_path}")
 
     search_dir = os.path.dirname(os.path.abspath(dotenv_path))
-    with open(dotenv_path, "r", encoding=encoding) as fh:
+    with open(dotenv_path, encoding=encoding) as fh:
         text = fh.read()
 
     if core.file_mode(text) == "asymmetric":
@@ -77,7 +77,7 @@ def load_env(
 
 
 __all__ = [
-    "load_env",
-    "MasterKeyNotFoundError",
     "DotsealError",
+    "MasterKeyNotFoundError",
+    "load_env",
 ]

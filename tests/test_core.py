@@ -12,7 +12,6 @@ from dotseal.exceptions import (
     PrivateKeyNotFoundError,
 )
 
-
 # --- find_key_file -----------------------------------------------------------
 
 
@@ -903,7 +902,7 @@ def test_reencrypt_text_with_comments_and_empty_body():
 
 
 def test_parse_plaintext_policy_ignores_empty_regex_chunks():
-    keys, regexes = core.parse_plaintext_policy({core.PLAINTEXT_REGEX_TOKEN: ","})
+    _keys, regexes = core.parse_plaintext_policy({core.PLAINTEXT_REGEX_TOKEN: ","})
     assert regexes == []
 
 

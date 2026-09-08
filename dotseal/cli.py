@@ -14,6 +14,7 @@ Commands:
 from __future__ import annotations
 
 import argparse
+import contextlib
 import fnmatch
 import os
 import shlex
@@ -33,7 +34,7 @@ _GITIGNORE_NOTE = "# Added by `dotseal init` -- never commit your master key"
 def _read(path: str) -> str:
     if not os.path.isfile(path):
         raise DotsealError(f"Input file not found: {path}")
-    with open(path, "r", encoding="utf-8") as fh:
+    with open(path, encoding="utf-8") as fh:
         return fh.read()
 
 
@@ -110,7 +111,7 @@ def _collect_recipients(args: argparse.Namespace) -> list[str]:
     if recipients_file:
         if not os.path.isfile(recipients_file):
             raise DotsealError(f"Recipients file not found: {recipients_file}")
-        with open(recipients_file, "r", encoding="utf-8") as fh:
+        with open(recipients_file, encoding="utf-8") as fh:
             for line in fh:
                 stripped = line.strip()
                 if stripped and not stripped.startswith("#"):
@@ -129,10 +130,8 @@ def _secure_delete(path: str) -> None:
     except OSError:
         pass
     finally:
-        try:
+        with contextlib.suppress(OSError):
             os.unlink(path)
-        except OSError:
-            pass
 
 
 # --- gitignore handling -----------------------------------------------------
@@ -163,7 +162,7 @@ def _ensure_gitignored(name: str, directory: str) -> str:
     """Make sure ``name`` is ignored by git. Returns a human-readable status."""
     gitignore = os.path.join(directory, ".gitignore")
     if os.path.isfile(gitignore):
-        with open(gitignore, "r", encoding="utf-8") as fh:
+        with open(gitignore, encoding="utf-8") as fh:
             content = fh.read()
         if _gitignore_covers(content, name):
             return f"{name} already present in .gitignore"
@@ -342,7 +341,7 @@ def cmd_edit(args: argparse.Namespace) -> int:
         editor_cmd = shlex.split(editor)
         while True:
             try:
-                result = subprocess.run(editor_cmd + [tmp_path])
+                result = subprocess.run([*editor_cmd, tmp_path])
             except FileNotFoundError:
                 _err(f"Editor not found: {editor!r}. Set $EDITOR to a valid editor.")
                 return 1
@@ -352,7 +351,7 @@ def cmd_edit(args: argparse.Namespace) -> int:
                 )
                 return 1
 
-            with open(tmp_path, "r", encoding="utf-8") as fh:
+            with open(tmp_path, encoding="utf-8") as fh:
                 edited = fh.read()
 
             if edited == cleartext:
