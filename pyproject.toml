@@ -68,3 +68,6 @@ select = ["E4", "E7", "E9", "F", "UP", "I", "B", "SIM", "RUF"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra"
+
+[tool.uv]
+exclude-newer = "7 days"
